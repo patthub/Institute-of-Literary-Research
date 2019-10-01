@@ -31,7 +31,7 @@ for (i in x) {
 progress(match(i,x), max.value = length(x))
 b <- sprintf("%02d", i-1)
 path1 <- "C:/Users/User/Desktop/bn_all_1.10.2019/msplit000000"
-path2 <- "00"#b
+path2 <- b
 path3 <- ".mrk"
 path <- paste(path1,path2,path3,sep = "")
 bn1 <- readLines(path, encoding = "UTF-8")
@@ -169,9 +169,9 @@ write.csv2(data_full2, file = "C:/Users/User/Desktop/bn_kartoteka_wzorcowa.csv",
 
 ```
 
-2. Przygotowanie list ksi??ek dla danego roku
+2. Przygotowanie list książek dla danego roku
 
-```{r wydobycie list ksi??ek}
+```{r wydobycie list ksiazek}
 data_full <- read.csv2("C:/Users/User/Desktop/bn_data_all_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 data_full <- mutate(data_full,
                 rok = str_sub(data_full$X008,8,11))
