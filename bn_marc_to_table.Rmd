@@ -30,33 +30,29 @@ x <- 1:33
 for (i in x) {
 progress(match(i,x), max.value = length(x))
 b <- sprintf("%02d", i-1)
-path1 <- "C:/Users/User/bn_all_1.10.2019/msplit000000"
-path2 <- b
+path1 <- "C:/Users/User/Desktop/bn_all_1.10.2019/msplit000000"
+path2 <- "00"#b
 path3 <- ".mrk"
 path <- paste(path1,path2,path3,sep = "")
 bn1 <- readLines(path, encoding = "UTF-8")
 data1 <- data.frame(bn1)
 remove(bn1)
-data1 <- mutate(data1,
-                czy = grepl("^\\=LDR",data1$bn1))
 data1 <- data1 %>%
-  filter(bn1!="")
-
-data1 <- mutate(data1,
-                id = ifelse(grepl("^\\=001",data1$bn1),str_replace_all(data1$bn1,"(^\\=001 .*?\\w)(.*?)($)","\\2"),NA))
-data1 <- data1 %>%
-  fill(id) 
-data1$id[data1$czy==TRUE] <- NA
-data1 <- data1 %>%
+  mutate(czy = grepl("^\\=LDR",bn1),
+         row = ifelse(grepl("^\\=LDR",bn1),seq.int(nrow(data1)),NA)) %>%
+  filter(bn1!="") %>%
+  fill(row) %>%
+  mutate(id = ifelse(grepl("^\\=009",bn1),str_replace_all(bn1,"(^\\=009 .*?\\w)(.*?)($)","\\2"),NA)) %>%
+  group_by(row) %>%
+  fill(id) %>%
   fill(id,.direction = "up") %>%
-  select(-2)
-data1 <- mutate(data1,
-                field = str_replace_all(data1$bn1, "(=)(\\w{3})(.*)", "\\2"),
-                content = str_replace_all(data1$bn1,"(=)(\\w{3})(\\s{2})(.*)","\\4"))
-data1 <- data1 %>%
-  select(2,3,4)
-data1 <- mutate(data1,
-                id_field = paste(data1$id,data1$field,sep = "|"))
+  ungroup() %>%
+  select(-2,-3) %>%
+  mutate(field = str_replace_all(bn1, "(=)(\\w{3})(.*)", "\\2"),
+         content = str_replace_all(bn1,"(=)(\\w{3})(\\s{2})(.*)","\\4")) %>%
+  select(2,3,4) %>%
+  mutate(id_field = paste(id,field,sep = "|"))
+
 count <- data1 %>%
   select(4,3)
 count <- as.data.frame(table(count$id_field))
