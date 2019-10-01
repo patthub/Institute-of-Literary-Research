@@ -7,7 +7,7 @@ output:
 ---
 
 1. Downloading file from Polish National Library database. Editing in MarcEdit: tools->marc processing tools -> marc split. Dividing for 200000 records and process.
-2. Marc tools -> MarcBreaker i change from .mrc to .mrk (30 seconds per a text file that can be uploaded to R)
+2. Marc tools -> MarcBreaker and change from .mrc to .mrk; set default character encoding to UTF-8 (30 seconds per a text file that can be uploaded to R)
 3. For loop in R (need to divide for a smaller parts)
 
 ```{r BN marc processing to table}
