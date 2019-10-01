@@ -1,0 +1,440 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(RSelenium)
+library(xml2)
+library(rvest)
+library(tidyverse)
+library(stringr)
+library(svMisc)
+library(splitstackshape)
+library(stringdist)
+library(RJDBC)
+library(purrr)
+library(sqldf)
+library(binman)
+
+#empty table
+table_data <- data.frame(data_person = character(), role = character(), data_person2 = character(), description = character(), stringsAsFactors=FALSE)
+#browser
+#list_versions("chromedriver")
+rD <- rsDriver(port=4444L,browser="chrome", chromever="77.0.3865.10")
+remDr <- rD$client
+url <- "http://ceny.ucl.cas.cz/index.php"
+#rD$server$stop()
+#rm(rD)
+#gc()
+#iteracje
+
+x <- seq(4,7500, by=2)
+
+for (i in x) {
+  progress(match(i,x), max.value = length(x))  
+  remDr$navigate(url)
+  webElem1 <- remDr$findElement("css selector", "#sbox")
+  webElem1$sendKeysToElement(list('*', key = 'enter'))
+  
+  selector_left <- "div:nth-child(2) div:nth-child(2) div:nth-child(2) div:nth-child(2) > a:nth-child("
+  selector_mid <- i
+  selector_right <- ")"
+  selector <- paste(selector_left,selector_mid,selector_right, sep = "")
+  
+  webElem2 <- remDr$findElement(using = 'css selector', selector)
+  data_person <- webElem2$getElementText()
+  data_person <- as.character(data_person)
+  webElem2$clickElement()
+  tryCatch({
+  role <- remDr$findElement(using = 'css selector', 'h3')
+  role <- role$getElementText()
+  role <- as.character(role)
+  }, error=function(e){
+                      role <<- "Brak danych (CR)"
+  })
+  data_person2 <- remDr$findElement(using = 'css selector', 'h2')
+  data_person2 <- data_person2$getElementText()
+  data_person2 <- as.character(data_person2)
+  description <- remDr$findElement(using = 'css selector', '.indent')
+  description <- description$getElementText()
+  description <- as.character(description)
+  
+  iteration <- cbind(data_person,role,data_person2,description)
+  
+  table_data <- rbind(table_data,iteration)
+}
+write.csv2(table_data, "C:/Users/Cezary/Desktop/czech_literary_prizes_1.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+table_data <- read.csv2("C:/Users/Cezary/Desktop/czech_literary_prizes_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+table_data <- table_data %>%
+  filter(role == "ocenění:") %>%
+  select(-role)
+
+#mutations
+
+table_data <- mutate(table_data,
+                     person_year = ifelse(grepl("\\d{4}", table_data$data_person2), as.character(str_replace_all(table_data$data_person2, "(.*)(, )(\\d.*)", "\\3")
+),NA))
+
+table_data <- mutate(table_data,
+                     single_prize = str_replace_all(table_data$description, "(\\n)(\\d{4} [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ])", "|\\2"))
+
+table_data <- cSplit(table_data, "single_prize", sep = "|", direction = "long")
+
+table_data$single_prize <- str_replace_all(table_data$single_prize,"\\n", "|")
+
+table_data <- mutate(table_data,
+                     prize_year = str_replace_all(table_data$single_prize, "(^\\d{4})(.*)", "\\1"),
+                     book_title__reason = ifelse(grepl("\\|",table_data$single_prize),as.character(str_replace_all(table_data$single_prize, "(^\\d{4} )(.*)(\\|)(.*)", "\\4")),NA),
+                     rest = ifelse(grepl("\\|",table_data$single_prize),as.character(str_replace_all(table_data$single_prize, "(^\\d{4} )(.*)(\\|)(.*)", "\\2")),as.character(str_replace_all(table_data$single_prize, "(^\\d{4} )(.*)($)", "\\2"))))
+
+
+table_data <- mutate(table_data,
+                     prize_name = ifelse(grepl("\\,",table_data$rest), as.character(str_replace_all(table_data$rest, "(.*?)(, )(.*)", "\\1")),as.character(table_data$rest)),
+                     prize_category__place = ifelse(grepl("\\,",table_data$rest), as.character(str_replace_all(table_data$rest, "(.*?)(, )(.*)", "\\3")),NA))
+table_data <- table_data %>%
+  select(data_person,person_year,prize_name,prize_year,prize_category__place,book_title__reason)
+colnames(table_data) <- c("person","person_year","prize_name","prize_year","prize_category__place","book_title__reason")
+                       
+write.csv2(table_data, "C:/Users/Cezary/Desktop/czech_literary_prizes.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+literary_prizes <- read.csv2("C:/Users/Cezary/Desktop/czech_literary_prizes.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+```
+
+```{r api dla Czechów}
+
+library(httr)
+library(jsonlite)
+library(lubridate)
+library(viafr)
+library(dplyr)
+library(purrr)
+library(stringr)
+library(tidyverse)
+library(XML)
+library(methods)
+library(svMisc)
+options(stringsAsFactors = FALSE)
+
+url  <- "http://www.viaf.org"
+path <- "eurlex/directory_code"
+
+tt_GET <- function(path, ...){
+  if (is.null(path))
+    stop("Nothing to parse")
+  uri <- "http://www.viaf.org/"
+  # call api
+  req <- httr::GET(uri, path = path, ...)
+  # check for http status
+  tt_check(req)
+  req
+}
+tt_check <- function(req) {
+  if (req$status_code < 400)
+    return(invisible())
+  stop("HTTP failure: ", req$status_code, "\n", call. = FALSE)
+}
+
+tt_parse_js <- function(req) {
+  text <- httr::content(req, as = "text")
+  if (identical(text, ""))
+    stop("Not output to parse", call. = FALSE)
+  jsonlite::fromJSON(text)
+}
+
+viaf_get <- function(viaf = NULL) {
+  if(is.null(viaf))
+    stop("No viaf provided")
+  tt_GET(path = paste0("viaf/", viaf), httr::add_headers(Accept = "application/json+links")) %>%
+    tt_parse_js()
+}
+
+viaf_suggest <- function(query = NULL){
+  if(is.null(query))
+    stop ("No query provided")
+  tt_GET(path = "viaf/AutoSuggest", query = list(query = query)) %>%
+  tt_parse_js()
+}
+
+ludzie <- table_data %>%
+  select(person) %>%
+  unique()
+ludzie <- data.frame(person = ludzie$person[2001:3253])
+
+x <- 1:length(ludzie$person)
+test3 <- data.frame(term = as.character(),displayForm = as.character(), nametype = as.character(), viafid = as.integer(), stringsAsFactors = FALSE)
+
+for (i in x) {
+  svMisc::progress(match(i,x), max.value = length(x))
+
+  test <- viaf_suggest(ludzie$person[i])
+  tryCatch({
+  test2 <- test$result %>%
+    select(term,displayForm,nametype,viafid)
+  }, error=function(e){
+                   test2 <<- data.frame(term = ludzie$person[i],displayForm = NA, nametype = NA, viafid =NA, stringsAsFactors = FALSE)
+})
+  test3 <- rbind(test3,test2)
+  
+}
+
+pierwsza_lista <- test3
+
+test3 <- rbind(pierwsza_lista,test3)
+test3 <- test3 %>%
+  unique() %>%
+  filter(grepl("personal|corporate",nametype))
+
+test3 <- ddply(test3, .(viafid, nametype), summarize, term = paste(term, collapse="|"))
+
+#ZROBIĆ pętle, iteracje, najpierw testowo 100 Viafów, a potem całość (może podwójne for dla linki1,2,3 i dla iteracji wewnątrz)
+
+test4 <- test3 %>%
+  select(viafid) %>%
+  filter(!is.na(viafid)) %>%
+  unique()
+
+tabela_viaf <- data.frame(Plec = character(), VIAF = character(), Zawod = character(), Linki = character(), Tworczosc = character(), Jezyk = character(), Narodowosc = character(), data_urodzenia = character(), data_smierci = character(), stringsAsFactors=FALSE)
+start_time <- Sys.time()
+for (i in x) {
+
+tryCatch({
+poczatek_url <- "http://viaf.org/viaf/"
+srodek_url <- test4$viafid[i]
+koniec_url <- "/viaf.xml"
+url <- paste(poczatek_url, srodek_url, koniec_url, sep = "")
+xml <- xmlParse(url)
+
+tryCatch({
+a <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:fixed/ns1:gender")),"Plec")
+a2 <- paste(unlist(a), collapse = "~")
+}, error=function(e){
+                    a2 <<- "No data here"
+})
+
+tryCatch({
+  d <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:viafID")),"VIAF")
+d2 <- paste(unlist(d), collapse = "~")
+}, error=function(e){
+                    d2 <<- "No data here"
+})
+tryCatch({
+  e <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:occupation/ns1:data/ns1:text")),"Zawod")
+e2 <- paste(unlist(e), collapse = "~")
+}, error=function(e){
+                    e2 <<- "No data here"
+})
+tryCatch({
+  f <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:xLinks/ns1:xLink")),"Linki")[1]
+f2 <- paste(unlist(f), collapse = "~")
+}, error=function(e){
+                    f2 <<- "No data here"
+})
+tryCatch({
+  g <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:titles/ns1:work/ns1:title")),"Tworczosc")
+g2 <- paste(unlist(g), collapse = "~")
+}, error=function(e){
+                    g2 <<- "No data here"
+})
+tryCatch({
+  h <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:languageOfEntity/ns1:data/ns1:text")),"Jezyk")
+h2 <- paste(unlist(h), collapse = "~")
+}, error=function(e){
+                    h2 <<- "No data here"
+})
+tryCatch({
+  j <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:nationalityOfEntity/ns1:data/ns1:text")),"Narodowosc")
+j2 <- paste(unlist(j), collapse = "~")
+}, error=function(e){
+                    j2 <<- "No data here"
+})
+tryCatch({
+  s <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:birthDate")),"data_urodzenia")
+s2 <- paste(unlist(s), collapse = "~")
+}, error=function(e){
+                    s2 <<- "No data here"
+})
+tryCatch({
+  w <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:deathDate")),"data_smierci")
+w2 <- paste(unlist(w), collapse = "~")
+}, error=function(e){
+                    w2 <<- "No data here"
+})
+total_i <- data.frame(Plec = a2, VIAF = d2, Zawod = e2, Linki = f2, Tworczosc = g2, Jezyk = h2, Narodowosc = j2, data_urodzenia = s2, data_smierci = w2)
+
+tabela_viaf <- rbind(tabela_viaf,total_i)
+}, error=function(e){NULL})
+
+  svMisc::progress(i, max.value = length(test4$viafid))#w zależnosci od paczki zmienia się nazwa pliku(3/4)
+  
+}
+colnames(tabela_viaf) <- c("Sex", "VIAF", "Occupation", "Links", "Works", "Language", "Nationality", "Date_of_birth", "Date_of_death")
+end_time <- Sys.time()
+tabela_viaf <- merge(test3, tabela_viaf, by.x = "viafid", by.y = "VIAF", all = TRUE)
+tabela_viaf <- tabela_viaf %>%
+  select(term,viafid,nametype,Date_of_birth,Date_of_death,Sex,Occupation,Links,Works,Language,Nationality)
+
+```
+
+
+
+```{r PBL_nagrody}
+#options(java.parameters = "-Xmx8000m")
+
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Program Files/R/R-3.5.2/ojdbc8.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
+pbl_prizes <- dbGetQuery(PBL,
+                         "select z.za_zapis_id, z.za_tytul, z.za_ro_rok, z.za_adnotacje||' '||z.za_adnotacje2||' '||z.za_adnotacje3, dz.dz_nazwa, io.odi_nazwisko, io.odi_imie
+from pbl_zapisy z
+join IBL_OWNER.pbl_rodzaje_zapisow rz on rz.rz_rodzaj_id=z.za_rz_rodzaj1_id
+join IBL_OWNER.pbl_dzialy dz on dz.dz_dzial_id=z.za_dz_dzial1_id
+join IBL_OWNER.pbl_osoby_do_indeksu io on io.odi_za_zapis_id=z.za_zapis_id
+where rz.rz_nazwa like 'nagroda'
+and dz.dz_nazwa in ('Nagrody (życie literackie)', 'Nagrody (Teatr, film, radio, telewizja - od 1945)')")
+
+
+new_func <- function(x,y){
+if(grepl(x,y,fixed=TRUE)){
+  check <- TRUE
+} else{
+  check <- FALSE
+}
+check
+}
+
+pbl_prizes <- pbl_prizes %>% 
+     mutate(in_name=map2(pbl_prizes$ODI_NAZWISKO, pbl_prizes$ZA_TYTUL, new_func))
+
+pbl_prizes <- pbl_prizes %>%
+  filter(in_name==FALSE) %>%
+  select(-in_name)
+
+pbl_prizes_people <- data.frame(osoby = paste(pbl_prizes$ODI_NAZWISKO, pbl_prizes$ODI_IMIE, sep = " "))
+pbl_prizes_people <- unique(pbl_prizes_people)
+nazwa <- data.frame(nazwa = str_to_lower(str_replace_all(pbl_prizes_people$osoby, "\\W", "")))
+pbl_prizes_people <- data.frame(osoba = pbl_prizes_people$osoby, nazwa = nazwa$nazwa)
+
+pbl_tworcy <- dbReadTable(PBL,'PBL_TWORCY')
+pbl_tworcy <- pbl_tworcy %>%
+  select(1,2,3,12,7,13,8)
+nazwa <- ifelse(is.na(pbl_tworcy$TW_IMIE),as.character(pbl_tworcy$TW_NAZWISKO),paste(pbl_tworcy$TW_NAZWISKO,pbl_tworcy$TW_IMIE, sep = ""))
+nazwa <- data.frame(nazwa = str_to_lower(str_replace_all(nazwa, "\\W", "")))
+pbl_tworcy <- data.frame(pbl_tworcy, nazwa = nazwa$nazwa)
+
+pbl_prizes_people <- sqldf::sqldf("select *
+                       from pbl_prizes_people a
+                       left join pbl_tworcy b on a.nazwa=b.nazwa")
+
+pbl_prizes_people <- pbl_prizes_people %>%
+  filter(TW_ROK_ZGONU>1987|is.na(TW_ROK_ZGONU)) %>%
+  select(1)
+
+pbl_prizes <- sqldf("select *
+                    from pbl_prizes a
+                    where a.ODI_NAZWISKO||' '||a.ODI_IMIE in (
+                    select *
+                    from pbl_prizes_people)")
+pbl_prizes <- mutate(pbl_prizes,
+                     rok_nagrody = ifelse(grepl("\\d",pbl_prizes$ZA_TYTUL),as.integer(str_replace_all(pbl_prizes$ZA_TYTUL,"(.*)(\\d{4})(.*)","\\2")),as.integer(pbl_prizes$ZA_RO_ROK)),
+                     tytul = str_replace_all(pbl_prizes$ZA_TYTUL,"(.*?)(\\()(.*)","\\1"))
+prize_title <- pbl_prizes$tytul
+prize_title <- data.frame(title = unique(prize_title))
+write.csv2(prize_title, "C:/Users/Cezary/Desktop/prize_title.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#open refine
+prize_title <- read.csv2("C:/Users/Cezary/Desktop/prize_title-csv.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+prize_title <- prize_title %>%
+  #select(right_title) %>%
+  unique()
+#ujednolicenie tytułów
+
+nazwa <- data.frame(nazwa = str_to_lower(str_replace_all(prize_title$right_title, "\\W", "")))
+prize_title <- data.frame(prize_title,nazwa)
+colnames(prize_title) <- c("title", "nazwa")
+
+x <- 1:length(prize_title$title)
+
+prize_check <- data.frame(iteration = as.integer(), prize_title1 = as.character(), nazwa1 = as.character(), prize_title2 = as.character(), nazwa2 = as.character(), V1 = as.character(), stringsAsFactors=FALSE)
+for (i in x) {
+
+lkj <- as.matrix(stringdistmatrix(a=prize_title$nazwa[i],b=prize_title$nazwa, method = "jw"))
+lkj <- data.frame(lkj)
+lkj <- data.frame(V1 = unlist(transpose(lkj)))
+
+kjh <- data.frame(iteration = rep(i,length(prize_title$title)), prize_title1 = rep(prize_title$title[i], length(prize_title$title)), nazwa1 = rep(prize_title$nazwa[i], length(prize_title$title)), prize_title, lkj)
+kjh <- kjh[order(kjh$V1),]
+kjh <- kjh %>%
+  filter(V1 >0)
+kjh <- rbind(kjh[1,],kjh[2,],kjh[3,],kjh[4,],kjh[5,])
+prize_check <- rbind(prize_check,kjh)
+progress(i, max.value = length(x))
+}
+
+pbl_prizes <- merge(x = pbl_prizes, y= prize_title, by.x = "tytul", by.y = "title")
+pbl_prizes <- pbl_prizes %>%
+  select(10,9,7,8) %>%
+  unique()
+write.csv2(prize_check, "C:/Users/Cezary/Desktop/prize_check.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+```
+
+```{r comparition}
+cz_prizes_full <- table_data %>%
+  select(3,4,1)
+cz_prizes <- table_data %>%
+  select(3,4,1) %>%
+  filter(prize_year > 1987 & prize_year < 2004)
+pl_prizes <- mutate(pbl_prizes,
+                    person = paste(pbl_prizes$ODI_NAZWISKO,", ",pbl_prizes$ODI_IMIE, sep = "")) %>%
+  select(right_title,rok_nagrody,person) %>%
+  filter(rok_nagrody > 1987 & rok_nagrody < 2004)
+
+colnames(pl_prizes) <- c("prize_name", "prize_year", "person")
+
+write.csv2(pl_prizes, "C:/Users/Cezary/Desktop/pl_prizes.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(cz_prizes, "C:/Users/Cezary/Desktop/cz_prizes.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+  
+```
+
+```{r osoby}
+
+cz_person <- cz_prizes %>%
+  select(person) %>%
+  unique()
+
+cz_person <- mutate(cz_person,
+                    nazwa = str_replace_all(str_to_lower(cz_person$person), "\\W", ""))
+cz_person$nazwa <- iconv(cz_person$nazwa, from ="UTF-8", to="ASCII//TRANSLIT")
+
+pl_person <- pl_prizes %>%
+  select(person) %>%
+  unique()
+
+pl_person <- mutate(pl_person,
+                    nazwa = str_replace_all(str_to_lower(pl_person$person), "\\W", ""))
+pl_person$nazwa <- iconv(pl_person$nazwa, from ="UTF-8", to="ASCII//TRANSLIT")
+
+people <- merge(x=cz_person, y=pl_person, by = "nazwa", all = TRUE)
+people_mutual <- people %>%
+  filter(!is.na(person.x)&!is.na(person.y))
+
+
+#fuzzy match
+x <- 1:length(cz_person$nazwa)
+
+person_compare <- data.frame(iteration = as.integer(), cz_person = as.character(), cz_nazwa = as.character(), pl_person = as.character(), pl_nazwa = as.character(), V1 = as.character(), stringsAsFactors=FALSE)
+for (i in x) {
+
+lkj <- as.matrix(stringdistmatrix(a=cz_person$nazwa[i],b=pl_person$nazwa, method = "jw"))
+lkj <- data.frame(lkj)
+lkj <- data.frame(V1 = unlist(transpose(lkj)))
+
+kjh <- data.frame(iteration = rep(i,length(pl_person$person)), cz_person = rep(cz_person$person[i], length(pl_person$person)), cz_nazwa = rep(cz_person$nazwa[i], length(pl_person$person)), pl_person, lkj)
+kjh <- kjh[order(kjh$V1),]
+kjh <- kjh %>%
+  filter(V1 >0)
+kjh <- rbind(kjh[1,],kjh[2,],kjh[3,],kjh[4,],kjh[5,])
+person_compare <- rbind(person_compare,kjh)
+progress(i, max.value = length(x))
+}
+person_compare <- person_compare[order(person_compare$V1),]
+write.csv2(pbl_prizes, "C:/Users/Cezary/Desktop/pbl_prizes.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+```
