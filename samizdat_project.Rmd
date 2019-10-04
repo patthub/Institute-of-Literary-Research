@@ -766,6 +766,6 @@ cz_people_record_id <- cz_people_record_id %>%
 #putting it together
 people_record_id <- rbind(bn_people_record_id,cz_people_record_id)
 
-write.csv2(people_record_id, "C:/Users/Cezary/Desktop/people_record_id.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(people_record_id, "C:/Users/Cezary/Desktop/people_record_id.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
 
