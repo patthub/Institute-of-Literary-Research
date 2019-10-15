@@ -7,6 +7,10 @@ output: html_notebook
 options(scipen = 999)
 pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,rvest,RSelenium,RJDBC,rjson,jsonlite,sqldf,XML,methods)
 
+#wgranie całej bazy książek
+#bn_ks <- read.csv2("C:/Users/cezar/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+bn_ks <- read.csv2("C:/Users/Cezary/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+
 jdbcDriver = JDBC("oracle.jdbc.OracleDriver", classPath = "C:/Users/Cezary/Downloads/ojdbc6.jar")
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
@@ -215,9 +219,6 @@ pbl_bn <- pbl_bn %>%
 ```
 
 ```{r utożsamienie na podstawie twórczości pbl i bn}
-#wgranie całej bazy książek
-#bn_ks <- read.csv2("C:/Users/cezar/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
-bn_ks <- read.csv2("C:/Users/Cezary/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 bn_ks_light <- bn_ks %>%
   filter(X100!="") %>%
   select(X009,X100,X245)
