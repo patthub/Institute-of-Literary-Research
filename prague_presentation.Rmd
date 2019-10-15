@@ -5,7 +5,7 @@ output: html_notebook
 ```{r}
 #biblioteki
 options(scipen = 999)
-pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,rvest,RSelenium,RJDBC,rjson,jsonlite,sqldf)
+pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,rvest,RSelenium,RJDBC,rjson,jsonlite,sqldf,XML,methods)
 
 jdbcDriver = JDBC("oracle.jdbc.OracleDriver", classPath = "C:/Users/Cezary/Downloads/ojdbc6.jar")
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
@@ -18,7 +18,8 @@ pbl_tworcy <- pbl_tworcy[1:100,]
 #tworzenie pustej tabeli
 wzorcowe_bn <- data.frame(pbl_id = character(), pbl_nazwisko = character(), pbl_imie = character(), bn_json = character(), stringsAsFactors=FALSE)
 #pętla for
-
+binman::rm_platform("phantomjs")
+wdman::selenium(retcommand = TRUE)
 rD <- rsDriver(port=4444L,browser="chrome", chromever="76.0.3809.126")
 #binman::list_versions("chromedriver")
 remDr <- rD$client
@@ -42,9 +43,9 @@ for (i in x) {
   iteration <- cbind(pbl_tworcy$TW_TWORCA_ID[i], pbl_tworcy$TW_NAZWISKO[i], pbl_tworcy$TW_IMIE[i], json_text)
   wzorcowe_bn <- rbind(wzorcowe_bn,iteration)
 }
-write.csv2(wzorcowe_bn, "C:/Users/User/Desktop/wzorcowe_bn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-wzorcowe_bn <- read.csv2("C:/Users/User/Desktop/wzorcowe_bn.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
-wzorcowe_bn <- read.csv2("C:/Users/cezar/Downloads/wzorcowe_bn.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+#write.csv2(wzorcowe_bn, "C:/Users/User/Desktop/wzorcowe_bn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#wzorcowe_bn <- read.csv2("C:/Users/User/Desktop/wzorcowe_bn.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+#wzorcowe_bn <- read.csv2("C:/Users/cezar/Downloads/wzorcowe_bn.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 ```
 
 ```{r}
@@ -104,8 +105,7 @@ bn_json_full <- merge(bn_json_full,pbl_tworcy,by.x = "pbl_id",by.y = "TW_TWORCA_
 bn_json_full <- bn_json_full %>%
   select(1:3,pbl_lata = lata, 4:6, 8)
 
-write.csv2(bn_json_full, "C:/Users/User/Desktop/wzorcowe_bn_i_pbl_tworcy.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-
+#write.csv2(bn_json_full, "C:/Users/User/Desktop/wzorcowe_bn_i_pbl_tworcy.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
 
 ```{r utożsamienie na podstawie lat życia}
@@ -155,12 +155,10 @@ pbl_bn <- test %>%
   select(-Freq) %>%
   arrange(pbl_id)
 
-write.csv2(pbl_bn, "C:/Users/Cezary/Desktop/bn_to_pbl.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#write.csv2(pbl_bn, "C:/Users/Cezary/Desktop/bn_to_pbl.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
 
 ```{r utożsamienie po dacie z zapisu o rodzaju zgon}
-#test <- gs_read(gs_title("mapowanie_osob_bn_pbl"), ws = "bn_to_pbl")
-
 pbl_bn <- pbl_bn %>%
   mutate(lp = 1:length(pbl_id))
 
@@ -213,17 +211,17 @@ pbl_bn <- pbl_bn %>%
 pbl_bn <- pbl_bn %>%
   select(-jest_data)
 
-write.csv2(test, "C:/Users/cezar/Desktop/test.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#write.csv2(test, "C:/Users/cezar/Desktop/test.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
 
 ```{r utożsamienie na podstawie twórczości pbl i bn}
 #wgranie całej bazy książek
-bn_ks <- read.csv2("C:/Users/cezar/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
-remove(bn_ks)
+#bn_ks <- read.csv2("C:/Users/cezar/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+bn_ks <- read.csv2("C:/Users/Cezary/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 bn_ks_light <- bn_ks %>%
   filter(X100!="") %>%
   select(X009,X100,X245)
-
+#remove(bn_ks)
 marc_field100 <- bn_ks_light %>%
   select(X009,X100)#%>%
   #filter(X245!="")
@@ -247,17 +245,17 @@ subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
 x <- 1:length(subfield_list)
 
 for (i in x) {
+  progress(match(i,x), max.value = length(x))
   marc_field100$X100 <- str_replace(marc_field100$X100,subfield_list_char[i],"|\\1")
-  progress(match(i,x), max.value = length(x)) 
 }
 for (i in x) {
+  progress(match(i,x), max.value = length(x))
   subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-string_a <- "(^)(.*?\\|"
-string_b <- subfield_list_char2[i]
-string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-string <- paste(string_a,string_b,string_c,sep = "")
-marc_field100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field100$X100),str_replace_all(gsub(string,"\\3",marc_field100$X100),"\\${2}.", "~"),NA)
-progress(match(i,x), max.value = length(x))  
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field100$X100),str_replace_all(gsub(string,"\\3",marc_field100$X100),"\\${2}.", "~"),NA)
 }
 
 marc_field100$`$d` <- ifelse(substr(marc_field100$`$d`,1,1)!="(",paste("(",marc_field100$`$d`,sep = ""),ifelse(is.na(marc_field100$`$d`),NA,as.character(marc_field100$`$d`)))
@@ -291,17 +289,17 @@ subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
 x <- 1:length(subfield_list)
 
 for (i in x) {
+  progress(match(i,x), max.value = length(x))
   marc_field245$X245 <- str_replace(marc_field245$X245,subfield_list_char[i],"|\\1")
-  progress(match(i,x), max.value = length(x)) 
 }
 for (i in x) {
+  progress(match(i,x), max.value = length(x))
   subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-string_a <- "(^)(.*?\\|"
-string_b <- subfield_list_char2[i]
-string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-string <- paste(string_a,string_b,string_c,sep = "")
-marc_field245[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field245$X245),str_replace_all(gsub(string,"\\3",marc_field245$X245),"\\${2}.", "~"),NA)
-progress(match(i,x), max.value = length(x))  
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field245[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field245$X245),str_replace_all(gsub(string,"\\3",marc_field245$X245),"\\${2}.", "~"),NA)
 }
 marc_field245$`$a` <- str_replace(marc_field245$`$a`,"..$","")
 marc_field245 <- marc_field245 %>%
@@ -313,7 +311,6 @@ bn_ks_light <- merge(bn_ks_light,marc_field245,by = "X009",all.x = TRUE)
 bn_ks_light <- bn_ks_light %>%
   select(X009,name,title) %>%
   unique()
-
 
 plist <- pbl_bn %>%
   filter(is.na(czy_ten_sam)) %>%
@@ -390,12 +387,6 @@ write.csv2(pbl_bn, "C:/Users/cezar/Desktop/pbl_bn.csv", row.names = F, na = '', 
 ```
 
 ```{r sparowanie pbl i bn na podstawie twórczości viaf}
-#sparowanie pbl i bn na podstawie twórczości viaf
-library(XML)
-library(methods)
-
-#pbl_bn <- gs_read(gs_title("wzorcowe_bn_i_pbl_tworcy"), ws = "wzorcowe_bn_i_pbl_tworcy")
-
 bn_z_viaf <- pbl_bn %>%
   filter(is.na(czy_ten_sam)) %>%
   select(id,name,viaf) %>%
@@ -406,54 +397,46 @@ bn_z_viaf <- pbl_bn %>%
 tabela_viaf <- data.frame(id = character(), name = character(), gender = character(), VIAF = character(), Zawod = character(), Linki = character(), Tworczosc = character(), stringsAsFactors=FALSE)
 
 x <- 1:length(bn_z_viaf$id)
-start_time <- Sys.time()
+
 for (i in x) {
-progress(i, max.value = length(x))
-tryCatch({
-poczatek_url <- bn_z_viaf$viaf[i]
-koniec_url <- "/viaf.xml"
-url <- paste(poczatek_url, koniec_url, sep = "")
-xml <- xmlParse(url)
-
-tryCatch({
-a <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:fixed/ns1:gender")),"gender")
-a2 <- paste(unlist(a), collapse = "~")
-}, error=function(e){
-                    a2 <<- "Brak danych (CR)"
-})
-tryCatch({
-  e <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:occupation/ns1:data/ns1:text")),"Zawod")
-e2 <- paste(unlist(e), collapse = "~")
-}, error=function(e){
-                    e2 <<- "Brak danych (CR)"
-})
-tryCatch({
-  f <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:xLinks/ns1:xLink")),"Linki")[1]
-f2 <- paste(unlist(f), collapse = "~")
-}, error=function(e){
-                    f2 <<- "Brak danych (CR)"
-})
-tryCatch({
-  g <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:titles/ns1:work/ns1:title")),"Tworczosc")
-g2 <- paste(unlist(g), collapse = "~")
-}, error=function(e){
-                    g2 <<- "Brak danych (CR)"
-})
-total_i <- data.frame(id = bn_z_viaf$id[i], name = bn_z_viaf$name[i], gender = a2, VIAF = bn_z_viaf$viaf[i], Zawod = e2, Linki = f2, Tworczosc = g2)
-
-tabela_viaf <- rbind(tabela_viaf,total_i)
-}, error=function(e){NULL})
-
+  tryCatch({
+  poczatek_url <- bn_z_viaf$viaf[i]
+  koniec_url <- "/viaf.xml"
+  url <- paste(poczatek_url, koniec_url, sep = "")
+  xml <- xmlParse(url)
+  
+  tryCatch({
+  a <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:fixed/ns1:gender")),"gender")
+  a2 <- paste(unlist(a), collapse = "~")
+  }, error=function(e){
+                      a2 <<- "Brak danych (CR)"
+  })
+  tryCatch({
+    e <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:occupation/ns1:data/ns1:text")),"Zawod")
+  e2 <- paste(unlist(e), collapse = "~")
+  }, error=function(e){
+                      e2 <<- "Brak danych (CR)"
+  })
+  tryCatch({
+    f <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:xLinks/ns1:xLink")),"Linki")[1]
+  f2 <- paste(unlist(f), collapse = "~")
+  }, error=function(e){
+                      f2 <<- "Brak danych (CR)"
+  })
+  tryCatch({
+    g <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:titles/ns1:work/ns1:title")),"Tworczosc")
+  g2 <- paste(unlist(g), collapse = "~")
+  }, error=function(e){
+                      g2 <<- "Brak danych (CR)"
+  })
+  total_i <- data.frame(id = bn_z_viaf$id[i], name = bn_z_viaf$name[i], gender = a2, VIAF = bn_z_viaf$viaf[i], Zawod = e2, Linki = f2, Tworczosc = g2)
+  
+  tabela_viaf <- rbind(tabela_viaf,total_i)
+  }, error=function(e){NULL})
+  progress(i, max.value = length(x))
 }
-end_time <- Sys.time()
 
-print(end_time - start_time)
-write.csv2(tabela_viaf, "C:/Users/cezar/Desktop/bn_viaf_full.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-
-#połączenie z bazą PBL
-jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
-#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
-PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+#write.csv2(tabela_viaf, "C:/Users/cezar/Desktop/bn_viaf_full.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 
 tabela_viaf$tworczosc_nazwa <- str_replace_all(str_to_lower(tabela_viaf$Tworczosc), "\\W", "")
 tabela_viaf$tworczosc_nazwa <- iconv(tabela_viaf$tworczosc_nazwa, from ="UTF-8", to="ASCII//TRANSLIT")
@@ -506,8 +489,7 @@ test <- test %>%
 pbl_bn$match <- paste(pbl_bn$pbl_id,pbl_bn$id,sep = "|")
 pbl_bn <- merge(pbl_bn,test,by = "match",all.x = TRUE)
 pbl_bn <- pbl_bn %>%
-  mutate(czy_ten_sam = ifelse(!is.na(czy_ten_sam),as.character(czy_ten_sam),ifelse(hit=="tak","tak",ifelse(hit=="nie","nie",NA)))) %>%
-  select(-hit)
+  mutate(czy_ten_sam = ifelse(!is.na(czy_ten_sam),as.character(czy_ten_sam),ifelse(hit=="tak","tak",ifelse(hit=="nie","nie",NA))))
 test3 <- pbl_bn
 test3 <- test3 %>%
   mutate(hit = ifelse(is.na(hit),czy_ten_sam,as.character(hit))) %>%
@@ -527,7 +509,7 @@ pbl_bn <- test4 %>%
   select(-czy2) %>%
   filter(is.na(czy_ten_sam)|czy_ten_sam!="nie")
 
-write.csv2(pbl_bn, "C:/Users/cezar/Desktop/bn_to_pbl.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#write.csv2(pbl_bn, "C:/Users/cezar/Desktop/bn_to_pbl.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 #koniec
 ```
 
@@ -552,12 +534,12 @@ dookreslenie <- dookreslenie %>%
   unique() %>%
   arrange(test)
 
-write.csv2(dookreslenie, "C:/Users/cezar/Desktop/deskryptory.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#write.csv2(dookreslenie, "C:/Users/cezar/Desktop/deskryptory.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 
 ```
 
 ```{r usunięcie osób z niechcianymi deskryptorami i raczej tak dla pojedynczych wystąpień}
-pbl_bn <- gs_read(gs_title("bn_to_pbl"), ws = "bn_to_pbl")
+#pbl_bn <- gs_read(gs_title("bn_to_pbl"), ws = "bn_to_pbl")
 deskryptory <- gs_read(gs_title("deskryptory"), ws = "deskryptory")
 deskryptory <- deskryptory %>%
   filter(czy_zostaje=="nie")
@@ -603,7 +585,5 @@ pbl_bn <- pbl_bn %>%
   unique() %>%
   filter(czy_ten_sam!="nie"|is.na(czy_ten_sam))
 
-write.csv2(pbl_bn, "C:/Users/Cezary/Desktop/pbl_bn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-
-
+#write.csv2(pbl_bn, "C:/Users/Cezary/Desktop/pbl_bn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
