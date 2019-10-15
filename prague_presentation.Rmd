@@ -7,8 +7,9 @@ output: html_notebook
 options(scipen = 999)
 pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,rvest,RSelenium,RJDBC,rjson,jsonlite,sqldf)
 
+jdbcDriver = JDBC("oracle.jdbc.OracleDriver", classPath = "C:/Users/Cezary/Downloads/ojdbc6.jar")
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
-jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 
 pbl_tworcy <- RJDBC::dbReadTable(PBL,"PBL_TWORCY")
@@ -18,7 +19,7 @@ pbl_tworcy <- pbl_tworcy[1:100,]
 wzorcowe_bn <- data.frame(pbl_id = character(), pbl_nazwisko = character(), pbl_imie = character(), bn_json = character(), stringsAsFactors=FALSE)
 #pętla for
 
-rD <- rsDriver(port=4444L,browser="chrome", chromever="76.0.3809.25")
+rD <- rsDriver(port=4444L,browser="chrome", chromever="76.0.3809.126")
 #binman::list_versions("chromedriver")
 remDr <- rD$client
 
