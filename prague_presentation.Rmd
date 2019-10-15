@@ -3,38 +3,34 @@ title: "R Notebook"
 output: html_notebook
 ---
 ```{r}
-#biblioteki
+#libraries
 options(scipen = 999)
 pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,rvest,RSelenium,RJDBC,rjson,jsonlite,sqldf,XML,methods)
-
-#wgranie całej bazy książek
-#bn_ks <- read.csv2("C:/Users/cezar/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
-bn_ks <- read.csv2("C:/Users/Cezary/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 
 jdbcDriver = JDBC("oracle.jdbc.OracleDriver", classPath = "C:/Users/Cezary/Downloads/ojdbc6.jar")
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 
-pbl_tworcy <- RJDBC::dbReadTable(PBL,"PBL_TWORCY")
-pbl_tworcy <- pbl_tworcy[1:100,]
+pbl_writers <- RJDBC::dbReadTable(PBL,"PBL_TWORCY")
+pbl_writers <- pbl_writers[1:100,]
 
-#tworzenie pustej tabeli
-wzorcowe_bn <- data.frame(pbl_id = character(), pbl_nazwisko = character(), pbl_imie = character(), bn_json = character(), stringsAsFactors=FALSE)
-#pętla for
-binman::rm_platform("phantomjs")
-wdman::selenium(retcommand = TRUE)
+#empty table
+authority_nlp <- data.frame(pbl_id = character(), pbl_last_name = character(), pbl_first_name = character(), nlp_json = character(), stringsAsFactors=FALSE)
+#for loop
+#binman::rm_platform("phantomjs")
+#wdman::selenium(retcommand = TRUE)
 rD <- rsDriver(port=4444L,browser="chrome", chromever="76.0.3809.126")
 #binman::list_versions("chromedriver")
 remDr <- rD$client
 
-x <- 1:length(pbl_tworcy$TW_TWORCA_ID)
+x <- 1:length(pbl_writers$TW_TWORCA_ID)
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
   url_1 <- "http://data.bn.org.pl/api/authorities.json?limit=100&name="
-  url_2 <- tolower(pbl_tworcy$TW_NAZWISKO)[i]
+  url_2 <- tolower(pbl_writers$TW_NAZWISKO)[i]
   url_3 <- "+"
-  url_4 <- tolower(pbl_tworcy$TW_IMIE)[i]
+  url_4 <- tolower(pbl_writers$TW_IMIE)[i]
   url <- as.character(paste(url_1,url_2,url_3,url_4,sep = ""))
   tryCatch({
     remDr$navigate(url)
@@ -44,94 +40,84 @@ for (i in x) {
   }, error=function(e){
                    json_text <<- "brak danych CR"
 })
-  iteration <- cbind(pbl_tworcy$TW_TWORCA_ID[i], pbl_tworcy$TW_NAZWISKO[i], pbl_tworcy$TW_IMIE[i], json_text)
-  wzorcowe_bn <- rbind(wzorcowe_bn,iteration)
+  iteration <- cbind(pbl_writers$TW_TWORCA_ID[i], pbl_writers$TW_NAZWISKO[i], pbl_writers$TW_IMIE[i], json_text)
+  authority_nlp <- rbind(authority_nlp,iteration)
 }
-#write.csv2(wzorcowe_bn, "C:/Users/User/Desktop/wzorcowe_bn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#wzorcowe_bn <- read.csv2("C:/Users/User/Desktop/wzorcowe_bn.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
-#wzorcowe_bn <- read.csv2("C:/Users/cezar/Downloads/wzorcowe_bn.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 ```
 
-```{r}
-wzorcowe_bn$json_text <- as.character(wzorcowe_bn$json_text)
+```{r clearing the data}
+authority_nlp$json_text <- as.character(authority_nlp$json_text)
 
-bn_wzorcowe <- wzorcowe_bn %>%
+nlp_people_authority <- authority_nlp %>%
   filter(nchar(json_text)>41)
 
-bn_puste <- wzorcowe_bn %>%
+bn_puste <- authority_nlp %>%
   filter(nchar(json_text)<=41)
 
-bn_json_full <- data.frame(pbl_id = character(), pbl_nazwisko = character(), pbl_imie = character(), stringsAsFactors=FALSE)
-x <- 1:length(bn_wzorcowe$V1)
+nlp_json_full <- data.frame(pbl_id = character(), pbl_last_name = character(), pbl_first_name = character(), stringsAsFactors=FALSE)
+x <- 1:length(nlp_people_authority$V1)
 for (i in x) {
-progress(match(i,x), max.value = length(x)) 
-tryCatch({
-bn_json <- fromJSON(bn_wzorcowe$json_text[i])
-bn_json <- bn_json$authorities
-bn_json2 <- bn_json$marc
-bn_json$viaf <- str_extract_all(bn_json2$fields, "http:\\/\\/viaf\\.org\\/viaf\\/\\d+")
-
-bn_json <- bn_json %>%
-  select(id,name,kind,title,viaf)
-}, error=function(e){
-                   bn_json <<- data.frame(id = "błąd w pliku BN json",name = "błąd w pliku BN json",kind = "błąd w pliku BN json",title = "błąd w pliku BN json",viaf = "błąd w pliku BN json")
-})
-
-empty_table<- data.frame(matrix(ncol = 3,nrow = lengths(bn_json)[1]))
-colnames(empty_table) <- c("pbl_id", "pbl_nazwisko", "pbl_imie")
-empty_table$pbl_id <- bn_wzorcowe$V1[i]
-empty_table$pbl_nazwisko <- bn_wzorcowe$V2[i]
-empty_table$pbl_imie <- bn_wzorcowe$V3[i]
-bn_json_iteration <- cbind(empty_table,bn_json)
-bn_json_full <- rbind(bn_json_full,bn_json_iteration)
+  progress(match(i,x), max.value = length(x)) 
+  tryCatch({
+  nlp_json <- fromJSON(nlp_people_authority$json_text[i])
+  nlp_json <- nlp_json$authorities
+  nlp_json2 <- nlp_json$marc
+  nlp_json$viaf <- str_extract_all(nlp_json2$fields, "http:\\/\\/viaf\\.org\\/viaf\\/\\d+")
+  
+  nlp_json <- nlp_json %>%
+    select(id,name,kind,title,viaf)
+  }, error=function(e){
+                     nlp_json <<- data.frame(id = "NLP lack of data",name = "NLP lack of data",kind = "NLP lack of data",title = "NLP lack of data",viaf = "NLP lack of data")
+  })
+  
+  empty_table<- data.frame(matrix(ncol = 3,nrow = lengths(nlp_json)[1]))
+  colnames(empty_table) <- c("pbl_id", "pbl_last_name", "pbl_first_name")
+  empty_table$pbl_id <- nlp_people_authority$V1[i]
+  empty_table$pbl_last_name <- nlp_people_authority$V2[i]
+  empty_table$pbl_first_name <- nlp_people_authority$V3[i]
+  nlp_json_iteration <- cbind(empty_table,nlp_json)
+  nlp_json_full <- rbind(nlp_json_full,nlp_json_iteration)
 }
-#bn_puste <- bn_puste %>%
-#  select(-json_text)
-#colnames(bn_puste) <- c("pbl_id", "pbl_nazwisko", "pbl_imie")
-#do_dodania <- data.frame(id = "brak informacji w BN",name = "brak informacji w BN",kind = "brak informacji w BN",title = "brak informacji w BN",viaf = "brak informacji w BN")
-#bn_puste <- cbind(bn_puste, do_dodania)
-#bn_json_full <- rbind(bn_json_full,bn_puste)
-bn_json_full$viaf <- as.character(bn_json_full$viaf)
-bn_json_full$viaf <- ifelse(bn_json_full$viaf=="character(0)","",as.character(bn_json_full$viaf))
-bn_json_full <- bn_json_full %>%
+
+nlp_json_full$viaf <- as.character(nlp_json_full$viaf)
+nlp_json_full$viaf <- ifelse(nlp_json_full$viaf=="character(0)","",as.character(nlp_json_full$viaf))
+nlp_json_full <- nlp_json_full %>%
   filter(title=="") %>%
   filter(kind=="person")
-
-#połączenie z bazą PBL
-pbl_tworcy <- dbGetQuery(PBL,
-                          "select tw.tw_tworca_id, tw.tw_rok_urodzin||'-'||tw.tw_rok_zgonu \"lata\"
-                          from pbl_tworcy tw")
-pbl_tworcy <- pbl_tworcy[1:100,]
-pbl_tworcy <- pbl_tworcy %>%
-  filter(lata!="-")
-
-bn_json_full <- merge(bn_json_full,pbl_tworcy,by.x = "pbl_id",by.y = "TW_TWORCA_ID", all.x = TRUE)
-bn_json_full <- bn_json_full %>%
-  select(1:3,pbl_lata = lata, 4:6, 8)
-
-#write.csv2(bn_json_full, "C:/Users/User/Desktop/wzorcowe_bn_i_pbl_tworcy.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
 
-```{r utożsamienie na podstawie lat życia}
-pbl_bn <- bn_json_full #gs_read(gs_title("wzorcowe_bn_i_pbl_tworcy"), ws = "wzorcowe_bn_i_pbl_tworcy")
+```{r reconciliation based on years of life}
+#PBL - years of life
+pbl_writers <- dbGetQuery(PBL,
+                          "select tw.tw_tworca_id, tw.tw_rok_urodzin||'-'||tw.tw_rok_zgonu \"years\"
+                          from pbl_tworcy tw")
+pbl_writers <- pbl_writers[1:100,]
+pbl_writers <- pbl_writers %>%
+  filter(years!="-")
+
+nlp_json_full <- merge(nlp_json_full,pbl_writers,by.x = "pbl_id",by.y = "TW_TWORCA_ID", all.x = TRUE)
+nlp_json_full <- nlp_json_full %>%
+  select(1:3,pbl_years = years, 4:6, 8)
+
+pbl_bn <- nlp_json_full
 
 x <- 1:length(pbl_bn$pbl_id)
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
-  pbl_bn$jest_data[i] <- grepl(pbl_bn$pbl_lata[i],pbl_bn$name[i])
+  pbl_bn$is_date[i] <- grepl(pbl_bn$pbl_years[i],pbl_bn$name[i])
 }
-pbl_bn$jest_data <- ifelse(is.na(pbl_bn$jest_data),0,as.integer(pbl_bn$jest_data))
+pbl_bn$is_date <- ifelse(is.na(pbl_bn$is_date),0,as.integer(pbl_bn$is_date))
 pbl_bn <- pbl_bn %>%
-  mutate(pbl_nazewnictwo = paste(pbl_nazwisko,pbl_imie,sep = ", ")) %>%
-  mutate(identyczne_nazewnictwo = pbl_nazewnictwo==name)
-pbl_bn$pbl_nazewnictwo <- NULL
+  mutate(pbl_name = paste(pbl_last_name,pbl_first_name,sep = ", ")) %>%
+  mutate(identical_name = pbl_name==name)
+pbl_bn$pbl_name <- NULL
 pbl_bn <- pbl_bn %>%
-  mutate(czy_ten_sam = ifelse(jest_data==1,"tak",NA))
+  mutate(is_the_same = ifelse(is_date==1,"yes",NA))
 pbl_bn <- pbl_bn %>%
   group_by(pbl_id) %>%
-  arrange(pbl_id, czy_ten_sam)
+  arrange(pbl_id, is_the_same)
 
-#sprawdzić, czy identyfikator się powtarza
+#unique identifier
 pbl_bn %$%  
     { pbl_id == dplyr::lag(pbl_id, 1) } %>% 
     as.numeric() %>% 
@@ -139,97 +125,93 @@ pbl_bn %$%
 pbl_bn$same[1] <- 0
 
 pbl_bn <- pbl_bn %>%
-  mutate(czy2 = czy_ten_sam) %>%
+  mutate(czy2 = is_the_same) %>%
   group_by(pbl_id) %>%
   fill(czy2)
 
 pbl_bn <- pbl_bn %>%
-  mutate(czy_ten_sam = ifelse(is.na(czy_ten_sam)&czy2=="tak","nie",ifelse(czy_ten_sam=="tak"&czy2=="tak","tak",NA)))
+  mutate(is_the_same = ifelse(is.na(is_the_same)&czy2=="yes","no",ifelse(is_the_same=="yes"&czy2=="yes","yes",NA)))
 
 test <- pbl_bn %>%
-  select(-jest_data,-same,-czy2,-identyczne_nazewnictwo) %>%
-  filter(czy_ten_sam!="nie"|is.na(czy_ten_sam))
+  select(-is_date,-same,-czy2,-identical_name) %>%
+  filter(is_the_same!="no"|is.na(is_the_same))
 
 count <- as.data.frame(table(test$pbl_id))
 
 test <- merge(x=test,y=count, by.x = "pbl_id", by.y = "Var1")
 test <- test %>%
-  mutate(czy_ten_sam = ifelse(is.na(czy_ten_sam)&Freq==1,"raczej tak",ifelse(czy_ten_sam=="tak","tak",NA)))
+  mutate(is_the_same = ifelse(is.na(is_the_same)&Freq==1,"rather yes",ifelse(is_the_same=="yes","yes",NA)))
 pbl_bn <- test %>%
   select(-Freq) %>%
   arrange(pbl_id)
-
-#write.csv2(pbl_bn, "C:/Users/Cezary/Desktop/bn_to_pbl.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
 
-```{r utożsamienie po dacie z zapisu o rodzaju zgon}
+```{r reconciliation based on date of death in PBL bibliographical records}
 pbl_bn <- pbl_bn %>%
   mutate(lp = 1:length(pbl_id))
 
-tworcy_search <- pbl_bn %>%
-  filter(is.na(czy_ten_sam)) %>%
+writers_search <- pbl_bn %>%
+  filter(is.na(is_the_same)) %>%
   select(pbl_id) %>%
   unique()
 
-zgon <- dbGetQuery(PBL,
+pbl_death <- dbGetQuery(PBL,
                           "select tw.tw_tworca_id,z.za_adnotacje
                           from pbl_tworcy tw
                           join IBL_OWNER.pbl_zapisy_tworcy zt on zt.zatw_tw_tworca_id=tw.tw_tworca_id
                           join IBL_OWNER.pbl_zapisy z on zt.zatw_za_zapis_id=z.za_zapis_id
                           and z.za_rz_rodzaj1_id=44")
-zgon <- sqldf("select *
-              from zgon a
-              where a.TW_TWORCA_ID in (select b.pbl_id from tworcy_search b)")
-zgon <- zgon %>%
+pbl_death <- sqldf("select *
+              from pbl_death a
+              where a.TW_TWORCA_ID in (select b.pbl_id from writers_search b)")
+pbl_death <- pbl_death %>%
   filter(!is.na(ZA_ADNOTACJE)) %>%
   mutate(rok = str_extract(ZA_ADNOTACJE,"\\d{4}")) %>%
   select(TW_TWORCA_ID,rok) %>%
   unique() %>%
   filter(!is.na(rok))
-zgon$rok <- paste("-",zgon$rok,sep = "")
+pbl_death$rok <- paste("-",pbl_death$rok,sep = "")
 
-test <- merge(x=pbl_bn, y=zgon, by.x = "pbl_id",by.y = "TW_TWORCA_ID")
+test <- merge(x=pbl_bn, y=pbl_death, by.x = "pbl_id",by.y = "TW_TWORCA_ID")
 
 x <- 1:length(test$pbl_id)
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
-  test$jest_data[i] <- grepl(test$rok[i],test$name[i])
+  test$is_date[i] <- grepl(test$rok[i],test$name[i])
 }
 
 test <- test %>%
   group_by(pbl_id) %>%
-  mutate(grupa = paste(jest_data,collapse = ","))
+  mutate(grupa = paste(is_date,collapse = ",")) %>%
+  ungroup()
 test$strzal_w_grupie <- grepl("TRUE",test$grupa)
 test <- test %>%
   filter(strzal_w_grupie==TRUE) %>%
   select(-grupa)
 test <- test %>%
-  select(lp,jest_data) %>%
+  select(lp,is_date) %>%
   ungroup()
 test <- test %>%
-  select(lp,jest_data)
+  select(lp,is_date)
 
 pbl_bn <- merge(pbl_bn,test,by = "lp", all.x = TRUE)
 pbl_bn <- pbl_bn %>%
-  mutate(czy_ten_sam = ifelse(!is.na(czy_ten_sam),as.character(czy_ten_sam),ifelse(jest_data==TRUE,"tak",ifelse(jest_data==FALSE,"nie",NA))))
+  mutate(is_the_same = ifelse(!is.na(is_the_same),as.character(is_the_same),ifelse(is_date==TRUE,"yes",ifelse(is_date==FALSE,"no",NA))))
 pbl_bn <- pbl_bn %>%
-  select(-jest_data)
-
-#write.csv2(test, "C:/Users/cezar/Desktop/test.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+  select(-is_date)
 ```
 
-```{r utożsamienie na podstawie twórczości pbl i bn}
+```{r reconciliation based on works in pbl and nlp}
+#uploading NLP database
+#bn_ks <- read.csv2("C:/Users/cezar/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+bn_ks <- read.csv2("C:/Users/Cezary/Desktop/bn_data_ks_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 bn_ks_light <- bn_ks %>%
   filter(X100!="") %>%
   select(X009,X100,X245)
 #remove(bn_ks)
 marc_field100 <- bn_ks_light %>%
-  select(X009,X100)#%>%
-  #filter(X245!="")
-#marc_field100$X245<-str_replace_all(marc_field100$X245,"(^|\\|)","~\\1")
-#marc_field100<- cSplit(marc_field100,"X245",sep = "~",direction = "long")
-#marc_field100<- marc_field100%>%
-#  filter(X245!="")
+  select(X009,X100)
+
 marc_field100$X100<-str_remove_all(marc_field100$X100,"^\\|")
 marc_field100 <- mutate(marc_field100,
                indicator = str_replace_all(marc_field100$X100,"(^.*?)(\\$.*)","\\1"))
@@ -268,12 +250,8 @@ marc_field100 <- marc_field100 %>%
   select(X009,name)
 
 marc_field245 <- bn_ks_light %>%
-  select(X009,X245)#%>%
-  #filter(X245!="")
-#marc_field245$X245<-str_replace_all(marc_field245$X245,"(^|\\|)","~\\1")
-#marc_field245<- cSplit(marc_field245,"X245",sep = "~",direction = "long")
-#marc_field245<- marc_field245%>%
-#  filter(X245!="")
+  select(X009,X245)
+
 marc_field245$X245<-str_remove_all(marc_field245$X245,"^\\|")
 marc_field245 <- mutate(marc_field245,
                indicator = str_replace_all(marc_field245$X245,"(^.*?)(\\$.*)","\\1"))
@@ -314,7 +292,7 @@ bn_ks_light <- bn_ks_light %>%
   unique()
 
 plist <- pbl_bn %>%
-  filter(is.na(czy_ten_sam)) %>%
+  filter(is.na(is_the_same)) %>%
   mutate(name_single = str_replace_all(name,"([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ][a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž-]*){0,1}([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ][a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž]*,)","\\|\\1\\2"))
 plist <- plist %>%
   mutate(name_single = str_replace_all(name_single,"(\\) )([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ])","\\1\\|\\2"))
@@ -325,30 +303,26 @@ plist <- plist %>%
 
 test <- merge(x=plist,y=bn_ks_light,by.x = "name_single",by.y = "name")
 
-#przygotowanie danych pbl
+#przygotowano danych pbl
 ks_pbl <- dbGetQuery(PBL,
                           "select tw.tw_tworca_id, tw.tw_nazwisko||', '||tw.tw_imie \"osoba\",z.za_tytul
-                          from pbl_tworcy tw
+                          from pbl_writers tw
                           join IBL_OWNER.pbl_zapisy_tworcy zt on zt.zatw_tw_tworca_id=tw.tw_tworca_id
                           join IBL_OWNER.pbl_zapisy z on zt.zatw_za_zapis_id=z.za_zapis_id
                           and z.za_rz_rodzaj1_id in (1,741)")
 
-tworcy_search <- pbl_bn %>%
-  filter(is.na(czy_ten_sam)) %>%
+writers_search <- pbl_bn %>%
+  filter(is.na(is_the_same)) %>%
   select(pbl_id) %>%
   unique()
 ks_pbl <- sqldf("select *
               from ks_pbl a
-              where a.TW_TWORCA_ID in (select b.pbl_id from tworcy_search b)")
-write.csv2(ks_pbl, "C:/Users/cezar/Desktop/ks_pbl.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-ks_pbl <- read.csv2("C:/Users/User/Desktop/ks_pbl.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
-
+              where a.TW_TWORCA_ID in (select b.pbl_id from writers_search b)")
 test <- merge(x=test,y=ks_pbl,by.x = "pbl_id",by.y = "TW_TWORCA_ID")
 
 test$title_simple <- str_replace_all(str_to_lower(test$title), "\\W", "")
 #test$title_simple <- iconv(test$title_simple, from ="UTF-8", to="ASCII//TRANSLIT")
 test$ZA_TYTUL_simple <- str_replace_all(str_to_lower(test$ZA_TYTUL), "\\W", "")
-
 
 x <- 1:length(test$pbl_id)
 for (i in x) {
@@ -359,90 +333,86 @@ efekt_full <- test %>%
   filter(jest_hit==TRUE) %>%
   select(1:12) %>%
   unique()
-efekt_full$czy_ten_sam <- "tak"
+efekt_full$is_the_same <- "yes"
 efekt <- efekt_full %>%
   select(pbl_id) %>%
   unique()
 
-test2 <- pbl_bn#gs_read(gs_title("mapowanie_osob_bn_pbl"), ws = "bn_to_pbl")
+test2 <- pbl_bn
 test2 <- sqldf("select *
               from test2 a
               where a.pbl_id in (select b.pbl_id from efekt b)")
 efekt_light <- efekt_full %>%
-  select(lp,hit = czy_ten_sam)
+  select(lp,hit = is_the_same)
 
 test2 <- merge(test2,efekt_light,by = "lp",all.x = TRUE)
 
-test2$czy_ten_sam <- ifelse(test2$hit=="tak","tak","nie")
-test2$czy_ten_sam[is.na(test2$czy_ten_sam)] <- "nie"
+test2$is_the_same <- ifelse(test2$hit=="yes","yes","no")
+test2$is_the_same[is.na(test2$is_the_same)] <- "no"
 test2 <- test2 %>%
-  select(lp,hit = czy_ten_sam)
+  select(lp,hit = is_the_same)
 pbl_bn <- merge(pbl_bn,test2,by = "lp",all = TRUE)
 pbl_bn <- pbl_bn %>%
-  mutate(czy_ten_sam = ifelse(!is.na(czy_ten_sam),as.character(czy_ten_sam),ifelse(hit=="tak","tak",ifelse(hit=="nie","nie",NA)))) %>%
+  mutate(is_the_same = ifelse(!is.na(is_the_same),as.character(is_the_same),ifelse(hit=="yes","yes",ifelse(hit=="no","no",NA)))) %>%
   select(-hit)
 pbl_bn <- pbl_bn %>%
   unique()
-write.csv2(pbl_bn, "C:/Users/cezar/Desktop/pbl_bn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-
 ```
 
-```{r sparowanie pbl i bn na podstawie twórczości viaf}
-bn_z_viaf <- pbl_bn %>%
-  filter(is.na(czy_ten_sam)) %>%
+```{r reconciliation based on works in pbl and VIAF}
+nlp_with_viaf <- pbl_bn %>%
+  filter(is.na(is_the_same)) %>%
   select(id,name,viaf) %>%
   filter(viaf!="") %>%
   unique()
 
-#wydobywanie info z xml VIAF
+#VIAF XML extracion
 tabela_viaf <- data.frame(id = character(), name = character(), gender = character(), VIAF = character(), Zawod = character(), Linki = character(), Tworczosc = character(), stringsAsFactors=FALSE)
 
-x <- 1:length(bn_z_viaf$id)
+x <- 1:length(nlp_with_viaf$id)
 
 for (i in x) {
+  progress(i, max.value = length(x))
   tryCatch({
-  poczatek_url <- bn_z_viaf$viaf[i]
-  koniec_url <- "/viaf.xml"
-  url <- paste(poczatek_url, koniec_url, sep = "")
+  poczatek_url <- nlp_with_viaf$viaf[i]
+  konoc_url <- "/viaf.xml"
+  url <- paste(poczatek_url, konoc_url, sep = "")
   xml <- xmlParse(url)
   
   tryCatch({
   a <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:fixed/ns1:gender")),"gender")
   a2 <- paste(unlist(a), collapse = "~")
   }, error=function(e){
-                      a2 <<- "Brak danych (CR)"
+                      a2 <<- "no data (CR)"
   })
   tryCatch({
     e <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:occupation/ns1:data/ns1:text")),"Zawod")
   e2 <- paste(unlist(e), collapse = "~")
   }, error=function(e){
-                      e2 <<- "Brak danych (CR)"
+                      e2 <<- "no data (CR)"
   })
   tryCatch({
     f <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:xLinks/ns1:xLink")),"Linki")[1]
   f2 <- paste(unlist(f), collapse = "~")
   }, error=function(e){
-                      f2 <<- "Brak danych (CR)"
+                      f2 <<- "no data (CR)"
   })
   tryCatch({
     g <- setNames(xmlToDataFrame(nodes = getNodeSet(xml, "//ns1:VIAFCluster/ns1:titles/ns1:work/ns1:title")),"Tworczosc")
   g2 <- paste(unlist(g), collapse = "~")
   }, error=function(e){
-                      g2 <<- "Brak danych (CR)"
+                      g2 <<- "no data (CR)"
   })
-  total_i <- data.frame(id = bn_z_viaf$id[i], name = bn_z_viaf$name[i], gender = a2, VIAF = bn_z_viaf$viaf[i], Zawod = e2, Linki = f2, Tworczosc = g2)
+  total_i <- data.frame(id = nlp_with_viaf$id[i], name = nlp_with_viaf$name[i], gender = a2, VIAF = nlp_with_viaf$viaf[i], Zawod = e2, Linki = f2, Tworczosc = g2)
   
   tabela_viaf <- rbind(tabela_viaf,total_i)
   }, error=function(e){NULL})
-  progress(i, max.value = length(x))
 }
-
-#write.csv2(tabela_viaf, "C:/Users/cezar/Desktop/bn_viaf_full.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 
 tabela_viaf$tworczosc_nazwa <- str_replace_all(str_to_lower(tabela_viaf$Tworczosc), "\\W", "")
 tabela_viaf$tworczosc_nazwa <- iconv(tabela_viaf$tworczosc_nazwa, from ="UTF-8", to="ASCII//TRANSLIT")
 
-#wczytanie danych PBL
+#PBL_books
 pbl_ksiazki <- dbGetQuery(PBL,
                           "select tw.tw_tworca_id, z.za_zapis_id, z.za_tytul
                           from pbl_tworcy tw
@@ -484,63 +454,35 @@ test_full <- test
 test <- test %>%
   select(pbl_id = TW_TWORCA_ID,id)
 test$match <- paste(test$pbl_id,test$id,sep = "|")
-test$hit <- "tak"
+test$hit <- "yes"
 test <- test %>%
   select(match,hit)
 pbl_bn$match <- paste(pbl_bn$pbl_id,pbl_bn$id,sep = "|")
 pbl_bn <- merge(pbl_bn,test,by = "match",all.x = TRUE)
 pbl_bn <- pbl_bn %>%
-  mutate(czy_ten_sam = ifelse(!is.na(czy_ten_sam),as.character(czy_ten_sam),ifelse(hit=="tak","tak",ifelse(hit=="nie","nie",NA))))
+  mutate(is_the_same = ifelse(!is.na(is_the_same),as.character(is_the_same),ifelse(hit=="yes","yes",ifelse(hit=="no","no",NA))))
 test3 <- pbl_bn
 test3 <- test3 %>%
-  mutate(hit = ifelse(is.na(hit),czy_ten_sam,as.character(hit))) %>%
-  mutate(czy_ten_sam = hit) %>%
+  mutate(hit = ifelse(is.na(hit),is_the_same,as.character(hit))) %>%
+  mutate(is_the_same = hit) %>%
   select(-hit,-match)
 
 test3 <- test3 %>%
-  mutate(czy2 = czy_ten_sam) %>%
-  arrange(pbl_id,czy_ten_sam) %>%
+  mutate(czy2 = is_the_same) %>%
+  arrange(pbl_id,is_the_same) %>%
   group_by(pbl_id) %>%
   fill(czy2)
 
 test4 <- test3 %>%
-  mutate(czy_ten_sam = ifelse(is.na(czy_ten_sam)&czy2=="tak","nie",ifelse(czy_ten_sam=="tak"&czy2=="tak","tak",ifelse(czy_ten_sam=="raczej tak"&czy2=="raczej tak","raczej tak", ifelse(czy_ten_sam=="nie"&czy2=="nie","nie",NA)))))
+  mutate(is_the_same = ifelse(is.na(is_the_same)&czy2=="yes","no",ifelse(is_the_same=="yes"&czy2=="yes","yes",ifelse(is_the_same=="rather yes"&czy2=="rather yes","rather yes", ifelse(is_the_same=="no"&czy2=="no","no",NA)))))
 
 pbl_bn <- test4 %>%
   select(-czy2) %>%
-  filter(is.na(czy_ten_sam)|czy_ten_sam!="nie")
-
-#write.csv2(pbl_bn, "C:/Users/cezar/Desktop/bn_to_pbl.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#koniec
-```
-
-```{r usunąć dookreślenia niefilologiczne}
-plist <- pbl_bn %>%
-  filter(is.na(czy_ten_sam)) %>%
-  mutate(name_single = str_replace_all(name,"([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ][a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž-]*){0,1}([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ][a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž]*,)","\\|\\1\\2"))
-plist <- plist %>%
-  mutate(name_single = str_replace_all(name_single,"(\\) )([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ])","\\1\\|\\2"))
-
-plist <- cSplit(plist,"name_single",sep = "|",direction = "long")
-plist <- plist %>%
-  filter(name_single!="")
-
-dookreslenie <- plist %>%
-  select(name_single)
-dookreslenie$test <- ifelse(grepl("(.*?)(\\()([^\\d\\-]*)(\\))",dookreslenie$name_single),str_replace(dookreslenie$name_single,"(.*?)(\\()([^\\d]*)(\\))","\\3"),"")
-dookreslenie$test <- ifelse(grepl("^[[:upper:]]+$",substr(dookreslenie$test,1,1))==TRUE,"",as.character(dookreslenie$test))
-dookreslenie <- dookreslenie %>%
-  select(test) %>%
-  filter(test!="") %>%
-  unique() %>%
-  arrange(test)
-
-#write.csv2(dookreslenie, "C:/Users/cezar/Desktop/deskryptory.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+  filter(is.na(is_the_same)|is_the_same!="no")
 
 ```
 
-```{r usunięcie osób z niechcianymi deskryptorami i raczej tak dla pojedynczych wystąpień}
-#pbl_bn <- gs_read(gs_title("bn_to_pbl"), ws = "bn_to_pbl")
+```{r removing people with non-philological descriptors}
 deskryptory <- gs_read(gs_title("deskryptory"), ws = "deskryptory")
 deskryptory <- deskryptory %>%
   filter(czy_zostaje=="nie")
@@ -549,42 +491,40 @@ test <- sqldf("select *
                 from pbl_bn a
                 join deskryptory b on a.name like ('%'||b.deskryptory||'%')")
 test <- test %>%
-  mutate(czy_ten_sam = ifelse(!is.na(czy_ten_sam),as.character(czy_ten_sam),czy_zostaje)) %>%
+  mutate(is_the_same = ifelse(!is.na(is_the_same),as.character(is_the_same),czy_zostaje)) %>%
   mutate(czy_liczba = grepl("\\d+",name))
 test <- test %>%
   filter(czy_liczba==FALSE) %>%
-  filter(czy_ten_sam=="nie") %>%
-  select(lp,czy2 = czy_ten_sam)
+  filter(is_the_same=="nie") %>%
+  select(lp,czy2 = is_the_same)
 pbl_bn <- merge(pbl_bn,test,by = "lp",all.x = TRUE)
 pbl_bn <- pbl_bn %>%
-  mutate(test = ifelse(czy_ten_sam %in% c("tak","nie","raczej tak"),as.character(czy_ten_sam),ifelse(czy2=="nie","nie",NA)))
+  mutate(test = ifelse(is_the_same %in% c("yes","no","rather yes"),as.character(is_the_same),ifelse(czy2=="nie","no",NA)))
 pbl_bn <- pbl_bn %>%
-  mutate(czy_ten_sam = test) %>%
+  mutate(is_the_same = test) %>%
   select(-czy2,-test) %>%
   unique() %>%
-  filter(czy_ten_sam!="nie"|is.na(czy_ten_sam))
+  filter(is_the_same!="no"|is.na(is_the_same))
 
 test <- pbl_bn %>%
-  filter(is.na(czy_ten_sam))
+  filter(is.na(is_the_same))
 
 count <- as.data.frame(table(test$pbl_id))
 
 test <- merge(x=test,y=count, by.x = "pbl_id", by.y = "Var1")
 test <- test %>%
-  mutate(czy_ten_sam = ifelse(is.na(czy_ten_sam)&Freq==1,"raczej tak",NA))
+  mutate(is_the_same = ifelse(is.na(is_the_same)&Freq==1,"rather yes",NA))
 test <- test %>%
-  filter(!is.na(czy_ten_sam)) %>%
-  select(lp,czy2 = czy_ten_sam)
+  filter(!is.na(is_the_same)) %>%
+  select(lp,czy2 = is_the_same)
 
 pbl_bn <- merge(pbl_bn,test,by = "lp",all.x = TRUE)
 pbl_bn <- pbl_bn %>%
-  mutate(test = ifelse(czy_ten_sam %in% c("tak","nie","raczej tak"),as.character(czy_ten_sam),ifelse(czy2=="raczej tak","raczej tak",NA)))
+  mutate(test = ifelse(is_the_same %in% c("yes","no","rather yes"),as.character(is_the_same),ifelse(czy2=="rather yes","rather yes",NA)))
 
 pbl_bn <- pbl_bn %>%
-  mutate(czy_ten_sam = test) %>%
+  mutate(is_the_same = test) %>%
   select(-czy2,-test) %>%
   unique() %>%
-  filter(czy_ten_sam!="nie"|is.na(czy_ten_sam))
-
-#write.csv2(pbl_bn, "C:/Users/Cezary/Desktop/pbl_bn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+  filter(is_the_same!="no"|is.na(is_the_same))
 ```
