@@ -101,6 +101,8 @@ nlp_json_full <- nlp_json_full %>%
 
 pbl_bn <- nlp_json_full
 
+#----------------------------------------------------
+
 x <- 1:length(pbl_bn$pbl_id)
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
@@ -171,6 +173,8 @@ pbl_death <- pbl_death %>%
   unique() %>%
   filter(!is.na(rok))
 pbl_death$rok <- paste("-",pbl_death$rok,sep = "")
+
+#--------------------------------------------------------------------------
 
 test <- merge(x=pbl_bn, y=pbl_death, by.x = "pbl_id",by.y = "TW_TWORCA_ID")
 
@@ -411,6 +415,8 @@ for (i in x) {
 
 tabela_viaf$tworczosc_nazwa <- str_replace_all(str_to_lower(tabela_viaf$Tworczosc), "\\W", "")
 tabela_viaf$tworczosc_nazwa <- iconv(tabela_viaf$tworczosc_nazwa, from ="UTF-8", to="ASCII//TRANSLIT")
+
+#--------------------------------------------------------------------
 
 #PBL_books
 pbl_ksiazki <- dbGetQuery(PBL,
