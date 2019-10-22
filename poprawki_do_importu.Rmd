@@ -1,0 +1,562 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r brakujące gatunki}
+options(scipen = 999)
+pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,stringi)
+
+#połączenie z bazą PBL
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
+import_start <- read.csv2("C:/Users/cezar/Desktop/import_start.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+
+import_start <- import_start %>%
+  mutate(temp_id = paste(rekord_BN,za_ro_rok,sep = "|")) %>%
+  mutate(pracownik = str_extract(pracownik, "([A-Z]*)"))
+
+pbl_import <- RJDBC::dbGetQuery(PBL,
+                            "select z.za_zapis_id, z.za_uwagi, z.za_ro_rok
+                            from pbl_zapisy z
+                            where z.za_uwagi like '%import%'")
+pbl_import <- pbl_import %>%
+  mutate(BN_id = str_extract(ZA_UWAGI,"(?<=BN: )(\\d+)")) %>%
+  mutate(pracownik_pbl = str_extract(ZA_UWAGI, "(?<=akceptuje:)([A-Z]*)")) %>%
+  mutate(temp_id = paste(BN_id,ZA_RO_ROK,sep = "|"))
+
+test <- merge(import_start,pbl_import,by = "temp_id")
+
+test <- test %>%
+  select(ZA_ZAPIS_ID,pracownik_od = pracownik, pracownik_do = pracownik_pbl) %>%
+  filter(pracownik_od !=pracownik_do) %>%
+  filter(pracownik_od!=""&pracownik_do!="")
+
+
+count <- as.data.frame(table(test$pracownik_od,test$pracownik_do)) %>%
+  filter(Freq > 0) %>%
+  arrange(-Freq)
+
+count2 <- as.data.frame(table(test$pracownik_od)) %>%
+  filter(Freq > 0) %>%
+  arrange(-Freq)
+
+count3 <- as.data.frame(table(test$pracownik_do)) %>%
+  filter(Freq > 0) %>%
+  arrange(-Freq)
+
+
+
+```
+
+```{r}
+# wykorzystać INO do tego, żeby nie buble nie wchodziły do bazy
+# nie mogę korzystać z listy polskich miejscowości, bo Warschau to Warszawa, a na liście tego nie będzie
+my.packages <- rownames(installed.packages())
+install.packages(my.packages)
+options(scipen = 999)
+options(java.parameters = "-Xmx4g" )
+Sys.setenv(JAVA_HOME='C:\\Program Files\\Java\\jdk1.8.0_191\\jre')
+options(java.home="C:\\Program Files\\Java\\jre1.8.0_191\\bin")
+install.packages("rgl")
+install.packages("qpdf")
+remove.packages("tabulizer")
+library(googlesheets)
+library(zoo)
+library(openxlsx)
+library(stringr)
+library(splitstackshape)
+library(plyr)
+library(dplyr)
+library(sqldf)
+library(stringdist)
+library(fuzzyjoin)
+library(data.table)
+library(svMisc)
+library(tidyverse)
+#library(RJDBC)
+#library(xlsx)
+library(stringi)
+library(pdftools)
+library(rJava)
+library(tabulizer)
+.libPaths()
+old.packages() 
+update.packages(ask = FALSE)
+#połączenie z bazą PBL
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/uzytkownik/Downloads/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
+listy_2005 <- gs_read(gs_title("ks_BN_2005_listy_pracowników"), ws = "lista_ksiazek")
+listy_2006 <- gs_read(gs_title("ks_BN_2006_listy_pracowników"), ws = "lista_ksiazek")
+listy_2007 <- gs_read(gs_title("ks_BN_2007_listy_pracowników"), ws = "lista_ksiazek")
+listy_2008 <- gs_read(gs_title("ks_BN_2008_listy_pracowników"), ws = "lista_ksiazek")
+listy_2004 <- gs_read(gs_title("ks_BN_2004_listy_pracowników"), ws = "lista_książek")
+listy_2004 <- listy_2004 %>%
+  mutate(typ_ksiazki = NA, link = NA, link_1 = NA, status = NA, blad_w_imporcie_tytulu = NA) %>%
+  select(pracownik,ZA_ZAPIS_ID,typ_ksiazki, link, link_1, rok, status, blad_w_imporcie_tytulu, X100, X245, X650, X655, X246, X250, X260, X300, X380, X490, X500, X501, X546, X600, X700, X041, X080)
+
+
+
+do2004 <- RJDBC::dbGetQuery(PBL,
+                            "select z.za_zapis_id, z.za_status_imp
+from pbl_zapisy z
+where z.za_uwagi like '%import%02%'")
+listy_2004 <- merge(listy_2004,do2004,by = "ZA_ZAPIS_ID",all.x = TRUE)
+listy_2004 <- listy_2004 %>%
+  mutate(status = ZA_STATUS_IMP) %>%
+  select(-ZA_STATUS_IMP)
+listy_2004 <- listy_2004 %>%
+  select(pracownik,ZA_ZAPIS_ID,typ_ksiazki, link, link_1, rok, status, blad_w_imporcie_tytulu, X100, X245, X650, X655, X246, X250, X260, X300, X380, X490, X500, X501, X546, X600, X700, X041, X080)
+
+
+lista_ksiazek <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008)
+lista_ksiazek <- lista_ksiazek %>%
+  select(ZA_ZAPIS_ID,status,X245,X260,X650,X655)
+
+test <- lista_ksiazek %>%
+  select(X650,X655,status) %>%
+  group_by(paste(X650,X655,sep = "|")) %>%
+  mutate(grupa = paste(status,collapse = ",")) %>%
+  ungroup() %>%
+  unique()
+test <- test %>%
+  filter(grepl("INO",grupa)) %>%
+  filter(!grepl("IOK|IMP|IPN|IPC",grupa))
+
+test2 <- test %>%
+  select(X655) %>%
+  unique()
+
+
+# porównanie listy miejscowości z listą polskich miast i wsi
+number_of_pages <- pdf_info("C:/Users/uzytkownik/Desktop/Miejscowości_2012.pdf")
+number_of_pages <- number_of_pages$pages
+# podział PDF na mniejsze pliki
+vector_pages <- split(1:number_of_pages, ceiling(seq_along(1:number_of_pages)/50))
+
+library(tabulizer)
+# Location of pdf file
+location <- 'C:/Users/uzytkownik/Desktop/Miejscowości_2012.pdf'
+
+# Extract the table
+i <- 1
+for (i in x) {
+  paste("out",i,sep = "") <- extract_tables(location,pages = 1:2)
+}
+
+
+#1) get the number of pages of the pdf file
+
+pdfPages <- length(get_page_dims("C:/Users/User/Desktop/pdf/Miejscowości_2012.pdf"))
+#2) Create a for loop to store a .csv file for each page.
+x <- 1:pdfPages
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  page <- extract_tables("C:/Users/User/Desktop/pdf/Miejscowości_2012.pdf", pages = i, method =  "lattice")
+  write.csv(page, file = paste("C:/Users/User/Desktop/pdf/",i,".csv", sep = ""))
+}
+#3) Then created another loop for reading each file by one, and rbind it to the next one.
+
+dataPdf  <- data.frame() # to rbind each .csv file
+for (i in c(1:pdfPages)){
+    progress(match(i,x), max.value = length(x)) 
+    page <- read.csv(paste("C:/Users/User/Desktop/pdf/",i,".csv", sep = ""),encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
+    dataPdf <- rbind(dataPdf, page) 
+}
+colnames(dataPdf) <- as.character(dataPdf[1,])
+
+dataPdf <- dataPdf %>%
+  filter(`1`!=1) %>%
+  select(-1)
+dataPdf <- dataPdf %>%
+  filter(Rodzaj=="miasto"|Rodzaj=="wieś")
+nazwy_polskie <- dataPdf %>%
+  select(`Nazwa miejscowości`) %>%
+  unique()
+
+write.csv2(nazwy_polskie, "C:/Users/User/Desktop/pdf/nazwy_polskie.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+
+test <- dataPdf %>%
+  select(Rodzaj) %>%
+  unique() %>%
+  arrange(Rodzaj) %>%
+  filter(!grepl(" ",Rodzaj))#filter(!grepl("^część |^kolonia |^osada |^osiedle ",Rodzaj,ignore.case = FALSE))
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+lista_ksiazek <- lista_ksiazek %>%
+  select(pracownik,ZA_ZAPIS_ID,X650,X655)
+
+tytuly <- RJDBC::dbGetQuery(PBL,
+                            "select z.za_zapis_id, z.za_tytul, z.za_status_imp, z.za_uwagi, rz.rz_nazwa
+                            from pbl_zapisy z
+                            join IBL_OWNER.pbl_rodzaje_zapisow rz on rz.rz_rodzaj_id=z.za_rz_rodzaj1_id
+                            where z.za_uwagi like '%import%'")
+
+tytuly <- merge(x = tytuly, y= lista_ksiazek, by = "ZA_ZAPIS_ID", all.x = TRUE)
+
+tytuly <- tytuly %>%
+  mutate(czy_pam = grepl("pamiętnik", X655, ignore.case = TRUE)) %>%
+  mutate(czy_podm = grepl("podm", ZA_UWAGI)) %>%
+  filter(!grepl("\\[",ZA_TYTUL)) %>%
+  filter(czy_pam==TRUE|czy_podm==TRUE) %>%
+  select(-czy_pam,-czy_podm) %>%
+  filter(!(ZA_STATUS_IMP == "IOK"&RZ_NAZWA!="książka twórcy (podmiotowa)"))
+
+tytuly <- tytuly %>%
+  mutate(gatunek = ifelse(grepl("poezja",X655,ignore.case = TRUE),"[Wiersz]",ifelse(grepl("aforyzm",X655,ignore.case = TRUE),"[Aforyzm]",ifelse(grepl("dramat",X655,ignore.case = TRUE),"[Tekst dramatyczny]",ifelse(grepl("opowiadani",X655,ignore.case = TRUE),"[Opowiadanie]",ifelse(grepl("pamiętniki",X655,ignore.case = TRUE),"[Wspomnienia]",ifelse(grepl("\\$apowieść",X655,ignore.case = TRUE),"[Powieść]",ifelse(grepl("szkice",X655,ignore.case = TRUE),"[Szkic]",ifelse(grepl("fraszka",X655,ignore.case = TRUE),"[Wiersz]",ifelse(grepl("felieton",X655,ignore.case = TRUE),"[Felieton]",ifelse(grepl("esej",X655,ignore.case = TRUE),"[Esej]",ifelse(grepl("wiersz",X655,ignore.case = TRUE),"[Wiersz]",ifelse(grepl("listy",X655,ignore.case = TRUE),"[List]",ifelse(grepl("podróżnicz",X655,ignore.case = TRUE),"[Reportaż]",ifelse(grepl("limeryk",X655,ignore.case = TRUE),"[Wiersz]",ifelse(grepl("miniatur",X655,ignore.case = TRUE),"[Miniatura prozą]",ifelse(grepl("szopka",X655,ignore.case = TRUE),"[Tekst dramatyczny]",ifelse(grepl("tragedia",X655,ignore.case = TRUE),"[Tekst dramatyczny]",ifelse(grepl("utwory sceniczne",X655,ignore.case = TRUE),"[Tekst dramatyczny]",ifelse(grepl("sonet",X655,ignore.case = TRUE),"[Wiersz]",ifelse(grepl("piosenk",X655,ignore.case = TRUE),"[Wiersz]",ifelse(grepl("komedi",X655,ignore.case = TRUE),"[Tekst dramatyczny]",ifelse(grepl("kazani",X655,ignore.case = TRUE),"[Kazanie]",ifelse(grepl("proz",X655,ignore.case = TRUE),"[Proza]",""))))))))))))))))))))))))
+
+tytuly <- tytuly %>%
+  mutate(czy = grepl("\\.$|\\!$|\\?$", ZA_TYTUL))
+tytuly <- tytuly %>%
+  mutate(new_title = ifelse(czy==TRUE&gatunek!="",paste(ZA_TYTUL,gatunek,sep = " "),ifelse(czy==FALSE&gatunek!="",paste(ZA_TYTUL,gatunek, sep = ". "),as.character(ZA_TYTUL)))) %>%
+  mutate(new_title = ifelse(grepl("( =)([^ ])",new_title), str_replace(new_title,"( =)([^ ])","\\1 \\2"),as.character(new_title))) %>%
+  mutate(new_title = ifelse(grepl("( ; {0,1})", new_title), str_replace_all(new_title, "( ; {0,1})", ". "),as.character(new_title))) %>%
+  mutate(new_title = ifelse(grepl("( )(: {0,1})", new_title), str_replace_all(new_title, "( )(: {0,1})", ". "),as.character(new_title)))
+
+tytuly <- tytuly %>%
+  filter(gatunek!="") %>%
+  select(ZA_ZAPIS_ID,jest = ZA_TYTUL,powinno_byc = new_title)
+
+write.csv2(tytuly, "C:/Users/Cezary/Desktop/ZA_TYTUL.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+```
+
+```{r opis współtwórców}
+lista_ksiazek <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008)
+lista_ksiazek <- lista_ksiazek %>%
+  select(pracownik,ZA_ZAPIS_ID,X245,X700)
+
+wspoltworcy <- RJDBC::dbGetQuery(PBL,
+                            "select z.za_zapis_id, z.za_opis_wspoltworcow, z.za_instytucja
+                            from pbl_zapisy z
+                            where z.za_uwagi like '%import%'")
+
+wspoltworcy <- merge(x = wspoltworcy, y= lista_ksiazek, by = "ZA_ZAPIS_ID", all.x = TRUE)
+
+wspoltworcy <- wspoltworcy %>%
+  filter(!is.na(ZA_OPIS_WSPOLTWORCOW))
+
+#zmiana opisu współtwórców
+
+marc_field <- wspoltworcy %>%
+  select(ZA_ZAPIS_ID,X700) %>%
+  unique()
+marc_field <- cSplit(marc_field,"X700",sep = "|",direction = "long")
+marc_field$X700<-str_remove_all(marc_field$X700,"^\\|")
+marc_field <- mutate(marc_field,
+               indicator = str_replace_all(marc_field$X700,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(wspoltworcy$X700,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+
+marc_field<-cbind(marc_field,empty_table)
+
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+
+for (i in x) {
+  marc_field$X700 <- str_replace(marc_field$X700,subfield_list_char[i],"|\\1")
+  progress(match(i,x), max.value = length(x)) 
+}
+for (i in x) {
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+string_a <- "(^)(.*?\\|"
+string_b <- subfield_list_char2[i]
+string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+string <- paste(string_a,string_b,string_c,sep = "")
+marc_field[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field$X700),str_replace_all(gsub(string,"\\3",marc_field$X700),"\\${2}.", "~"),NA)
+progress(match(i,x), max.value = length(x))  
+}
+marc_field$`$e` <- str_replace_all(marc_field$`$e`,"\\$e","|")
+colnames(marc_field)[9] <- "test"
+BN_wspoltworca <- marc_field %>%
+  select(ZA_ZAPIS_ID,osoba = `$a`,funkcja = `$e`) %>%
+  filter(!is.na(funkcja))
+
+BN_wspoltworca <- mutate(BN_wspoltworca,
+                   osoba_nazw = ifelse(grepl(",",BN_wspoltworca$osoba),str_replace_all(BN_wspoltworca$osoba,"(.*?)(, )(.*)","\\1"),as.character(BN_wspoltworca$osoba)),
+                   osoba_imie = ifelse(grepl(",",BN_wspoltworca$osoba),str_replace_all(BN_wspoltworca$osoba,"(.*?)(, )(.*)","\\3"),""))
+
+BN_wspoltworca <- BN_wspoltworca %>%
+  mutate(funkcja = str_to_lower(funkcja)) %>%
+  mutate(osoba_imie = str_replace(osoba_imie, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž]{2})(\\.$)", "\\1"))
+  
+za_opis_wspoltworcow <- mutate(BN_wspoltworca,
+                               opis = paste(BN_wspoltworca$funkcja,BN_wspoltworca$osoba_imie, BN_wspoltworca$osoba_nazw, sep = " "))
+za_opis_wspoltworcow <- za_opis_wspoltworcow %>%
+  select(ZA_ZAPIS_ID,opis)
+
+za_opis_wspoltworcow <- za_opis_wspoltworcow %>%
+  group_by(ZA_ZAPIS_ID) %>%
+  mutate(Uwagi = paste(opis, collapse = ". ")) %>%
+  select(-opis) %>%
+  unique()
+
+#koniec zmiany opisu współtwórców
+wspoltworcy <- merge(x = wspoltworcy, y= za_opis_wspoltworcow, by = "ZA_ZAPIS_ID", all.x = TRUE)
+#wydobycie strefy odpowiedzialności
+marc_field <- wspoltworcy %>%
+  select(ZA_ZAPIS_ID,X245)
+marc_field$X245<-str_remove_all(marc_field$X245,"^\\|")
+marc_field <- mutate(marc_field,
+               indicator = str_replace_all(marc_field$X245,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(wspoltworcy$X245,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+
+marc_field<-cbind(marc_field,empty_table)
+
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+
+for (i in x) {
+  marc_field$X245 <- str_replace(marc_field$X245,subfield_list_char[i],"|\\1")
+  progress(match(i,x), max.value = length(x)) 
+}
+for (i in x) {
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+string_a <- "(^)(.*?\\|"
+string_b <- subfield_list_char2[i]
+string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+string <- paste(string_a,string_b,string_c,sep = "")
+marc_field[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field$X245),str_replace_all(gsub(string,"\\3",marc_field$X245),"\\${2}.", "~"),NA)
+progress(match(i,x), max.value = length(x))  
+}
+
+colnames(marc_field)[9] <- "test"
+marc_field <- marc_field %>%
+  select(ZA_ZAPIS_ID,`$c`)
+
+wspoltworcy <- merge(x = wspoltworcy, y= marc_field, by = "ZA_ZAPIS_ID", all.x = TRUE)
+
+wspoltworcy <- wspoltworcy %>%
+  select(ZA_ZAPIS_ID, ZA_OPIS_WSPOLTWORCOW, ZA_INSTYTUCJA, Uwagi, `$c`)
+
+wspoltworcy <- cSplit(wspoltworcy,"$c",sep = " ; ",direction = "long")
+#ograniczanie osób ze strefy odpowiedzialności
+wspoltworcy <- wspoltworcy %>%
+  mutate(czy_mala = grepl(" [a-zęóąśłżźćń]|^[a-zęóąśłżźćń]|\\[[a-zęóąśłżźćń]",`$c`,ignore.case = FALSE)) %>%
+  filter(czy_mala==TRUE) %>%
+  select(-czy_mala) %>%
+  group_by(ZA_ZAPIS_ID) %>%
+  mutate(X245 = paste(`$c`, collapse = ", ")) %>%
+  select(-`$c`) %>%
+  unique()
+
+wspoltworcy <- wspoltworcy %>%
+  mutate(order_pbl = as.character(str_extract_all(Uwagi,"(?<=^| |\\[|-)([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽa-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])"))) %>%
+  mutate(order_pbl = str_replace_all(order_pbl,"(.*?\")(.)(\".*?.)", "\\2"))
+
+wspoltworcy <- wspoltworcy %>%
+  mutate(order_bn = as.character(str_extract_all(X245,"(?<=^| |\\[|-)([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽa-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])"))) %>%
+  mutate(order_bn = str_replace_all(order_bn,"(.*?\")(.)(\".*?.)", "\\2"))
+
+wspoltworcy <- wspoltworcy %>%
+  mutate(X245 = str_remove(X245, "\\.$")) %>%
+  mutate(X245 = str_remove(X245, "\\[")) %>%  
+  mutate(X245 = str_remove(X245, "\\]"))
+
+wspoltworcy <- wspoltworcy %>%
+  mutate(order_pbl = str_remove_all(order_pbl, "[a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž]")) %>%
+  mutate(order_bn = str_remove_all(order_bn, "[a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž]"))
+
+wspoltworcy <- wspoltworcy %>%
+  mutate(to_samo = order_pbl==order_bn) %>%
+  mutate(X245 = gsub("(^[a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(.*)","\\U\\1\\E\\2",perl = TRUE, X245))
+
+jezyk <- dbGetQuery(PBL,
+                      "select z.za_zapis_id, z.za_jezyk_oryginalu
+                      from pbl_zapisy z
+                      where z.za_uwagi like '%import%'")
+
+wspoltworcy <- merge(x = wspoltworcy, y= jezyk, by = "ZA_ZAPIS_ID", all.x = TRUE)
+wspoltworcy <- wspoltworcy %>%
+  mutate(czy_pl = grepl("pol",ZA_JEZYK_ORYGINALU))
+wspoltworcy <- wspoltworcy %>%
+  mutate(decyzja = ifelse(to_samo==FALSE|czy_pl==FALSE,FALSE,TRUE))
+
+za_opis_wspoltworcow <- wspoltworcy %>%
+  mutate(powinno_byc = ifelse(decyzja==TRUE,as.character(X245),paste(X245,ZA_OPIS_WSPOLTWORCOW,sep = "#"))) %>%
+  select(ZA_ZAPIS_ID,jest = ZA_OPIS_WSPOLTWORCOW,powinno_byc)
+za_opis_wspoltworcow <- cSplit(za_opis_wspoltworcow,"powinno_byc",sep = "#",direction = "wide")
+
+za_opis_wspoltworcow$powinno_byc_2 <- ifelse(is.na(za_opis_wspoltworcow$powinno_byc_2),'',as.character(za_opis_wspoltworcow$powinno_byc_2))
+
+za_opis_wspoltworcow <- za_opis_wspoltworcow %>%
+  mutate(to_samo = powinno_byc_1==powinno_byc_2)
+
+za_opis_wspoltworcow <- za_opis_wspoltworcow %>%
+  filter(to_samo==FALSE) %>%
+  group_by(ZA_ZAPIS_ID) %>%
+  mutate(powinno_byc = paste(powinno_byc_1,powinno_byc_2,sep = "#")) %>%
+  mutate(powinno_byc = str_remove_all(powinno_byc,"\\#$")) %>%
+  select(ZA_ZAPIS_ID,jest,powinno_byc)
+
+write.csv2(za_opis_wspoltworcow, "C:/Users/Cezary/Desktop/ZA_OPIS_WSPOLTWORCOW.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+
+test <- as.data.frame(table(wspoltworcy$decyzja))
+```
+
+```{r tytuły oryginałów}
+#sprawdzić liczbę \d{4} i różnicować, bo są błędy, np. oryg.: The worlds of Prot, 2002, Prot's report, 2004.
+lista_ksiazek <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008)
+lista_ksiazek <- lista_ksiazek %>%
+  select(pracownik,ZA_ZAPIS_ID,X246,X500)
+
+tyt_oryg <- dbGetQuery(PBL,
+                      "select z.za_zapis_id, z.za_tytul, z.za_tytul_oryginalu, z.za_status_imp
+                      from pbl_zapisy z
+                      where z.za_uwagi like '%import%'")
+
+tyt_oryg <- merge(x = tyt_oryg, y= lista_ksiazek, by = "ZA_ZAPIS_ID", all.x = TRUE)
+
+tyt_oryg <- tyt_oryg %>%
+  filter(!is.na(ZA_TYTUL_ORYGINALU)) %>%
+  filter(!is.na(X500)) %>%
+  filter(grepl("oryg",X500)|grepl("oryg",X246))
+
+marc_field <- tyt_oryg %>%
+  select(ZA_ZAPIS_ID,X246)
+marc_field$X246 <- str_replace_all(marc_field$X246,"(^|\\|)","~\\1")
+marc_field <- cSplit(marc_field,"X246",sep = "~",direction = "long")
+marc_field$X246<-str_remove_all(marc_field$X246,"^\\|")
+marc_field <- mutate(marc_field,
+               indicator = str_replace_all(marc_field$X246,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(tyt_oryg$X246,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+
+marc_field<-cbind(marc_field,empty_table)
+
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+
+for (i in x) {
+  marc_field$X246 <- str_replace(marc_field$X246,subfield_list_char[i],"|\\1")
+  progress(match(i,x), max.value = length(x)) 
+}
+for (i in x) {
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+string_a <- "(^)(.*?\\|"
+string_b <- subfield_list_char2[i]
+string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+string <- paste(string_a,string_b,string_c,sep = "")
+marc_field[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field$X246),str_replace_all(gsub(string,"\\3",marc_field$X246),"\\${2}.", "~"),NA)
+progress(match(i,x), max.value = length(x))  
+}
+colnames(marc_field)[9] <- "test"
+marc_field <- marc_field %>%
+  select(-9) %>%
+  filter(X246!="") %>%
+  select(ZA_ZAPIS_ID,`$a`,`$b`)
+marc_field$`$a` <- str_remove(marc_field$`$a`," :$")
+
+tyt_oryg <- merge(x = tyt_oryg, y= marc_field, by = "ZA_ZAPIS_ID", all.x = TRUE)
+
+x <- 1:lengths(tyt_oryg[1])
+for (i in x) {
+  tyt_oryg$czy[i] <- grepl(tyt_oryg$`$a`[i],tyt_oryg$X500[i])
+}
+
+tyt_oryg <- tyt_oryg %>%
+  mutate(czy_oryg = grepl("oryg",X500)) %>%
+  filter(czy==1&czy_oryg==TRUE)
+
+tyt_oryg <- tyt_oryg %>%
+  select(-X246,-czy,-czy_oryg)
+tyt_oryg <- tyt_oryg %>%
+  mutate(test = str_replace(X500,"(.*?)(oryg)(.*)","\\2\\3"))
+
+tyt_oryg <- tyt_oryg %>%
+  mutate(ile_dwukrop = str_count(test,"[^ ]:")) %>%
+  mutate(ile_cudzys = as.integer(str_count(test, "\"")/2)) %>%
+  mutate(ile_oryg = str_count(test, "oryg")) %>%
+  mutate(ile_elem = str_count(test," ; ")) %>%
+  mutate(ile_dat = str_count(test,"\\d{4}"))
+
+tyt_oryg <- tyt_oryg %>%
+  select(-`$a`,-`$b`) %>%
+  unique()
+
+tyt_oryg <- tyt_oryg %>%
+  mutate(new = ifelse(ile_oryg==1&ile_cudzys==0&ile_dat==1,str_replace(test,"(^.*?[^\\d]\\d{0,1}\\d, |.*?:{0,1} {0,1}\\[{0,1})([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)(\"\\. [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?$|\"\\. \\d{4}\\. [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?$|, \\d{4}.*?$|\\. - .*?$|\\. Na.*?.$|\\. Wg.*?.$| \\/\\/.*?$|\\W \\d{4}\\.$|\\.\\|.*?$|\"{0,1} \\d{4}\\.$|\"{0,1}\\.$)","\\2"),ifelse(ile_oryg==1&ile_cudzys==0&ile_dat==0,str_replace(test,"(^.*?[^\\d]\\d{0,1}\\d, |.*?:\\${0,1}a{0,1} {0,1}\\[{0,1})([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)(\"\\. [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?$|\"\\. \\d{4}\\. [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?$|, \\d{4}.*?$|\\. - .*?$|\\. Na.*?.$|\\. Wg.*?.$|\\. Stanowi.*?.$|\\. Pseud.*?.$|\\. P-.*?.$|\\. Tyt.*?.$| \\/\\/.*?$|\\W \\d{4}\\.$|\\. {0,1}\\|.*?$|\"{0,1} \\d{4}\\.$|\"{0,1}\\.$|$)","\\2"),ifelse(ile_oryg==1&ile_cudzys==1&ile_dat==1,str_replace(test,"(^.*?[^\\d]\\d{0,1}\\d, |.*?:{0,1} {0,1}\"{0,1})([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)(\"\\. [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?$|\"\\.{0,1} \\d{4}\\. [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?$|, \\d{4}.*?$|\\. - .*?$|\\. Na.*?.$|\\. Wg.*?.$|\\. Stanowi.*?.$|\\. Pseud.*?.$|\\. P-.*?.$|\\. Tyt.*?.$| \\/\\/.*?$|\\W \\d{4}\\.$| \\d{0,4}\\. {0,1}\\|.*?$|\"{0,1} \\d{4}\\.$|\"{0,1}\\.$|$)","\\2"),ifelse(ile_oryg==1&ile_cudzys==1&ile_dat==0,str_replace(test,"(^.*?[^\\d]\\d{0,1}\\d, |.*?:{0,1} {0,1}\"{0,1})([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)(\"\\. [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?$|\"\\.{0,1} \\d{4}\\. [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?$|, \\d{4}.*?$|\\. - .*?$|\\. Na.*?.$|\\. Wg.*?.$|\\. Stanowi.*?.$|\\. Pseud.*?.$|\\. P-.*?.$|\\. Tyt.*?.$| \\/\\/.*?$|\\W \\d{4}\\.$| \\d{0,4}\\. {0,1}\\|.*?$|\"{0,1} \\d{4}\\.$|\"{0,1}\\.$|\\]{0,1}\\..*?$|$)","\\2"),"")))))
+
+
+
+#tyt_oryg  <- tyt_oryg %>%
+#  mutate(new = ifelse(ile_dwukrop==1&ile_cudzys==0&ile_oryg==1&ile_elem==0,str_replace(test,"(^.*?[^\\d]\\d{0,1}\\d, |.*?: {0,1}\"{0,1})([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)(, \\d{4}.*?$|\\. - .*?$|\\. Na.*?.$|\\W \\d{4}\\.$|\\.\\|.*?$|\\.$)","\\2"),ifelse(ile_dwukrop==1&ile_cudzys==1&ile_oryg==1&ile_elem==0,str_replace(test,"(^.*?: {0,1}\"{0,1})([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)(\"\\..*?$|\" .*?$|, \\d{4}.*?$|\\. - .*?$|\\.$|\\.\\|.*?$)","\\2"),ifelse(ile_dwukrop==2&ile_cudzys==0&ile_oryg==1&ile_elem==0,str_replace(test,"(.*?[^\\d]\\d{0,1}\\d, |.*?: )([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)( \\/\\/.*?$|, \\d{4}.*?$|\\. P{0,1}- .*?$|\\. Na.*?.$|\\. Stanowi.*?.$|\\. Tyt.*?.$|\\, tyt.*?.$|\\. Wg.*?.$|\\. Pseud.*?.$|\\W \\d{4}\\.$|\\. {0,1}\\|.*?$|\\.$|\\. \\d{4}.*?$)","\\2"),ifelse(ile_dwukrop==2&ile_cudzys==1&ile_oryg==1&ile_elem==0,str_replace(test,"(^.*?: {0,1}\"{0,1})([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)(\"\\..*?$|\" .*?$|, \\d{4}.*?$|\\. - .*?$|\\.$|\\.\\|.*?$)","\\2"),ifelse(ile_dwukrop==3&ile_cudzys==0&ile_oryg==1&ile_elem==0,str_replace(test,"(.*?[^\\d]\\d{0,1}\\d, |.*?: \\[{0,1})([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)( \\/\\/.*?$|, \\d{4}.*?$|\\. P{0,1}- .*?$|\\. Na.*?.$|\\. Stanowi.*?.$|\\. Tyt.*?.$|\\, tyt.*?.$|\\. Wg.*?.$|\\. Pseud.*?.$|\\W \\d{4}\\.$|\\. {0,1}\\|.*?$|\\.$|\\. \\d{4}.*?$)","\\2"),as.character(str_extract_all(ifelse(tyt_oryg$ile_dwukrop==2&tyt_oryg$ile_cudzys==0&tyt_oryg$ile_oryg==2&tyt_oryg$ile_elem==0,as.character(str_extract_all(tyt_oryg$test,"(.*?: '{0,1}\\[{0,1})([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)(, [a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž].*?|, \\d{4}\\W [a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźžA-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ]|\\] \\d{4})")),""),"(?<=.: |.: '|.: \\[)([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ].*?)(?=, [a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž].{0,4}|, \\d{4}\\W [a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźžA-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ]|\\] \\d{4})"))))))))
+
+tyt_oryg$new <- str_remove(tyt_oryg$new, "^c\\(\"|\"\\)$")
+tyt_oryg$new <- str_remove(tyt_oryg$new, "\"\\)$")
+tyt_oryg$new <- str_remove(tyt_oryg$new, "\\[")
+tyt_oryg$new <- str_remove(tyt_oryg$new, "\\]")
+tyt_oryg$new <- str_replace(tyt_oryg$new, "\", \"",", ")
+tyt_oryg$new <- str_replace(tyt_oryg$new, "character\\(0\\)", "")
+tyt_oryg$new <- str_replace(tyt_oryg$new, " ; ", ", ")
+
+tyt_oryg$new <- gsub("(.*?)(\\.{0,1})( : )(\\({0,1}[A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽa-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž])(.*?$)","\\1. \\U\\4\\E\\5",perl = TRUE, tyt_oryg$new)
+tyt_oryg$new <- gsub("( )(:)( {0,1}[a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž])(.)","\\1\\U\\3\\E\\4",perl = TRUE, tyt_oryg$new)
+
+do_sprawdzenia <- tyt_oryg %>%
+  filter(new=="") %>%
+  select(ZA_ZAPIS_ID, pracownik, ZA_STATUS_IMP)
+
+tyt_oryg <- tyt_oryg %>%
+  filter(new!="") %>%
+  select(ZA_ZAPIS_ID, jest = ZA_TYTUL_ORYGINALU, powinno_byc = new)
+#write.csv2(tyt_oryg, "C:/Users/Cezary/Desktop/tyt_oryg.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(tyt_oryg, "C:/Users/Cezary/Desktop/ZA_TYTUL_ORYGINALU.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(do_sprawdzenia, "C:/Users/Cezary/Desktop/tyt_oryg_do_sprawdzenia.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+
+test <- as.data.frame(table(tyt_oryg$ile_dwukrop,tyt_oryg$ile_cudzys,tyt_oryg$ile_oryg,tyt_oryg$ile_elem,tyt_oryg$ile_dat))
+test <- as.data.frame(table(tyt_oryg$ile_oryg,tyt_oryg$ile_cudzys,tyt_oryg$ile_dat))
+test <- test %>%
+  filter(Freq>0)
+colnames(test) <- c("ile_oryg", "ile_cudzys", "ile_dat", "Freq")
+
+```
