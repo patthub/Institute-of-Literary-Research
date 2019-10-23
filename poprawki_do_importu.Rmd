@@ -30,7 +30,7 @@ pbl_import <- pbl_import %>%
 test <- merge(import_start,pbl_import,by = "temp_id")
 
 test <- test %>%
-  select(ZA_ZAPIS_ID,pracownik_od = pracownik, pracownik_do = pracownik_pbl) %>%
+  select(ZA_ZAPIS_ID, pracownik_od = pracownik, pracownik_do = pracownik_pbl) %>%
   filter(pracownik_od !=pracownik_do) %>%
   filter(pracownik_od!=""&pracownik_do!="")
 
@@ -47,7 +47,73 @@ count3 <- as.data.frame(table(test$pracownik_do)) %>%
   filter(Freq > 0) %>%
   arrange(-Freq)
 
+######################
+listy_2005 <- gs_read(gs_title("ks_BN_2005_listy_pracowników"), ws = "lista_ksiazek")
+listy_2006 <- gs_read(gs_title("ks_BN_2006_listy_pracowników"), ws = "lista_ksiazek")
+listy_2007 <- gs_read(gs_title("ks_BN_2007_listy_pracowników"), ws = "lista_ksiazek")
+listy_2008 <- gs_read(gs_title("ks_BN_2008_listy_pracowników"), ws = "lista_ksiazek")
+listy_2004 <- gs_read(gs_title("ks_BN_2004_listy_pracowników"), ws = "lista_książek")
+listy_2004 <- listy_2004 %>%
+  mutate(typ_ksiazki = NA, link = NA, link_1 = NA, status = NA, blad_w_imporcie_tytulu = NA) %>%
+  select(pracownik,ZA_ZAPIS_ID,typ_ksiazki, link, link_1, rok, status, blad_w_imporcie_tytulu, X100, X245, X650, X655, X246, X250, X260, X300, X380, X490, X500, X501, X546, X600, X700, X041, X080)
 
+
+
+do2004 <- RJDBC::dbGetQuery(PBL,
+                            "select z.za_zapis_id, z.za_status_imp
+from pbl_zapisy z
+where z.za_uwagi like '%import%02%'")
+listy_2004 <- merge(listy_2004,do2004,by = "ZA_ZAPIS_ID",all.x = TRUE)
+listy_2004 <- listy_2004 %>%
+  mutate(status = ZA_STATUS_IMP) %>%
+  select(-ZA_STATUS_IMP)
+listy_2004 <- listy_2004 %>%
+  select(pracownik,ZA_ZAPIS_ID,typ_ksiazki, link, link_1, rok, status, blad_w_imporcie_tytulu, X100, X245, X650, X655, X246, X250, X260, X300, X380, X490, X500, X501, X546, X600, X700, X041, X080)
+
+
+lista_ksiazek <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008)
+
+lista_ksiazek <- merge(lista_ksiazek,test,by = "ZA_ZAPIS_ID")
+
+case1 <- lista_ksiazek %>%
+  filter(pracownik_od == "GOSIA"& pracownik_do == "PAULINA") %>%
+  select(X650,X655,pracownik_od,pracownik_do) %>%
+  unique()
+
+case2 <- lista_ksiazek %>%
+  filter(pracownik_od == "GOSIA"& pracownik_do == "BEATAD") %>%
+  select(X650,X655,pracownik_od,pracownik_do) %>%
+  unique()
+
+
+########################
+zapisy <- RJDBC::dbGetQuery(PBL,
+                            "select z.za_zapis_id, z.za_status_imp, z.za_uwagi
+                            from pbl_zapisy z
+                            where z.za_uwagi like '%import%'") %>%
+  filter(ZA_STATUS_IMP=="IOK"|ZA_STATUS_IMP=="IPN"|ZA_STATUS_IMP=="IPC") %>%
+  mutate(pracownik_pbl = str_extract(ZA_UWAGI, "(?<=akceptuje:)([A-Z]*)")) %>%
+  select(ZA_ZAPIS_ID,pracownik_pbl)
+
+lista_ksiazek <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008)
+
+deskryptory_dla_osob <- merge(lista_ksiazek, zapisy,by = "ZA_ZAPIS_ID") %>%
+  select(X650,X655,pracownik_pbl) %>%
+  unique()
+
+test <- deskryptory_dla_osob %>%
+  mutate(joint = paste(X650,X655,sep = "|")) %>%
+  group_by(joint) %>%
+  mutate(grupa = paste(pracownik_pbl,collapse = ",")) %>%
+  ungroup() %>%
+  select(joint, grupa) %>%
+  unique() %>%
+  mutate(jeden = !grepl(",",grupa))
+
+
+test <- test %>%
+  filter(grepl("INO",grupa)) %>%
+  filter(!grepl("IOK|IMP|IPN|IPC",grupa))
 
 ```
 
