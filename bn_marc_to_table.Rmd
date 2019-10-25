@@ -12,20 +12,14 @@ output:
 
 ```{r BN marc processing to table}
 options(java.parameters = "-Xmx32000m")
-library(plyr)
-library(stringr)
-library(tidyverse)
-library(reshape2)
-library(zoo)
-library(sqldf)
-library(splitstackshape)
-library(dplyr)
-library(svMisc)
-library(googlesheets)
+pacman::p_load(plyr,stringr,tidyverse,reshape2,zoo,sqldf,splitstackshape,dplyr,svMisc,googlesheets)
 
-data_full <- data.frame(id = character(), field = character(), content = character(), stringsAsFactors=FALSE)
-x <- 1:33
-
+data_full <- data.frame()
+x <- 1:10
+x <- 11:20
+x <- 21:30
+x <- 31:33
+i <- 1
 #download database in pieces
 for (i in x) {
 progress(match(i,x), max.value = length(x))
@@ -35,7 +29,8 @@ path2 <- b
 path3 <- ".mrk"
 path <- paste(path1,path2,path3,sep = "")
 bn1 <- readLines(path, encoding = "UTF-8")
-data1 <- data.frame(bn1)
+data1 <- data.frame(data1)
+colnames(data1) <- "bn1"
 remove(bn1)
 data1 <- data1 %>%
   mutate(czy = grepl("^\\=LDR",bn1),
@@ -75,14 +70,25 @@ data1 <- data1[order(as.character(data1$id_field)),]
 data1 <- data1 %>%
   select(3,4,2)
 data_full <- rbind(data_full,data1)
+
 }
 
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+saveRDS(data_full,file = "bn_full_3.Rdata")
+
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_1.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 remove(data1)
 remove(data_full)
 bn1 <- read.csv2("C:/Users/User/Desktop/bn_data_all_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 bn2 <- read.csv2("C:/Users/User/Desktop/bn_data_all_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 bn3 <- read.csv2("C:/Users/User/Desktop/bn_data_all_3.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+
+bn1 <- readRDS("C:\\Users\\User\\Documents\\Institute-of-Literary-Research\\bn_full_1.Rdata")
+bn2 <- readRDS("C:\\Users\\User\\Documents\\Institute-of-Literary-Research\\bn_full_2.Rdata")
+bn3 <- readRDS("C:\\Users\\User\\Documents\\Institute-of-Literary-Research\\bn_full_3.Rdata")
+
+bn1 <- as.data.frame(bn1)
+bn2 <- as.data.frame(bn2)
+bn3 <- as.data.frame(bn3)
 
 data_full <- rbind(bn1,bn2,bn3)
 
