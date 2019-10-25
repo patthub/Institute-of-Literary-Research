@@ -14,12 +14,10 @@ output:
 options(java.parameters = "-Xmx32000m")
 pacman::p_load(plyr,stringr,tidyverse,reshape2,zoo,sqldf,splitstackshape,dplyr,svMisc,googlesheets)
 
+#1
 data_full <- data.frame()
 x <- 1:10
-x <- 11:20
-x <- 21:30
-x <- 31:33
-i <- 1
+
 #download database in pieces
 for (i in x) {
 progress(match(i,x), max.value = length(x))
@@ -29,8 +27,7 @@ path2 <- b
 path3 <- ".mrk"
 path <- paste(path1,path2,path3,sep = "")
 bn1 <- readLines(path, encoding = "UTF-8")
-data1 <- data.frame(data1)
-colnames(data1) <- "bn1"
+data1 <- data.frame(bn1)
 remove(bn1)
 data1 <- data1 %>%
   mutate(czy = grepl("^\\=LDR",bn1),
@@ -73,18 +70,195 @@ data_full <- rbind(data_full,data1)
 
 }
 
-saveRDS(data_full,file = "bn_full_3.Rdata")
-
 write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_1.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-remove(data1)
-remove(data_full)
+
+#2
+data_full <- data.frame()
+
+x <- 11:20
+
+#download database in pieces
+for (i in x) {
+progress(match(i,x), max.value = length(x))
+b <- sprintf("%02d", i-1)
+path1 <- "C:/Users/User/Desktop/bn_all_1.10.2019/msplit000000"
+path2 <- b
+path3 <- ".mrk"
+path <- paste(path1,path2,path3,sep = "")
+bn1 <- readLines(path, encoding = "UTF-8")
+data1 <- data.frame(bn1)
+remove(bn1)
+data1 <- data1 %>%
+  mutate(czy = grepl("^\\=LDR",bn1),
+         row = ifelse(grepl("^\\=LDR",bn1),seq.int(nrow(data1)),NA)) %>%
+  filter(bn1!="") %>%
+  fill(row) %>%
+  mutate(id = ifelse(grepl("^\\=009",bn1),str_replace_all(bn1,"(^\\=009 .*?\\w)(.*?)($)","\\2"),NA)) %>%
+  group_by(row) %>%
+  fill(id) %>%
+  fill(id,.direction = "up") %>%
+  ungroup() %>%
+  select(-2,-3) %>%
+  mutate(field = str_replace_all(bn1, "(=)(\\w{3})(.*)", "\\2"),
+         content = str_replace_all(bn1,"(=)(\\w{3})(\\s{2})(.*)","\\4")) %>%
+  select(2,3,4) %>%
+  mutate(id_field = paste(id,field,sep = "|"))
+
+count <- data1 %>%
+  select(4,3)
+count <- as.data.frame(table(count$id_field))
+data1 <- merge(x=data1,y=count, by.x = "id_field", by.y = "Var1")
+remove(count)
+data1_to_join <- data1 %>%
+  filter(Freq > 1)
+data1_to_join <- ddply(data1_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data1_to_join <- mutate(data1_to_join,
+                        id = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\3"))
+data1_ok <- data1 %>%
+  filter(Freq == 1) %>%
+  select(-5) %>%
+  select(1,4,2,3)
+data1 <- rbind(data1_ok,data1_to_join)
+remove(data1_ok)
+remove(data1_to_join)
+data1 <- data1[order(as.character(data1$id_field)),]
+data1 <- data1 %>%
+  select(3,4,2)
+data_full <- rbind(data_full,data1)
+
+}
+
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_2.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+#3
+data_full <- data.frame()
+
+x <- 21:30
+
+#download database in pieces
+for (i in x) {
+progress(match(i,x), max.value = length(x))
+b <- sprintf("%02d", i-1)
+path1 <- "C:/Users/User/Desktop/bn_all_1.10.2019/msplit000000"
+path2 <- b
+path3 <- ".mrk"
+path <- paste(path1,path2,path3,sep = "")
+bn1 <- readLines(path, encoding = "UTF-8")
+data1 <- data.frame(bn1)
+remove(bn1)
+data1 <- data1 %>%
+  mutate(czy = grepl("^\\=LDR",bn1),
+         row = ifelse(grepl("^\\=LDR",bn1),seq.int(nrow(data1)),NA)) %>%
+  filter(bn1!="") %>%
+  fill(row) %>%
+  mutate(id = ifelse(grepl("^\\=009",bn1),str_replace_all(bn1,"(^\\=009 .*?\\w)(.*?)($)","\\2"),NA)) %>%
+  group_by(row) %>%
+  fill(id) %>%
+  fill(id,.direction = "up") %>%
+  ungroup() %>%
+  select(-2,-3) %>%
+  mutate(field = str_replace_all(bn1, "(=)(\\w{3})(.*)", "\\2"),
+         content = str_replace_all(bn1,"(=)(\\w{3})(\\s{2})(.*)","\\4")) %>%
+  select(2,3,4) %>%
+  mutate(id_field = paste(id,field,sep = "|"))
+
+count <- data1 %>%
+  select(4,3)
+count <- as.data.frame(table(count$id_field))
+data1 <- merge(x=data1,y=count, by.x = "id_field", by.y = "Var1")
+remove(count)
+data1_to_join <- data1 %>%
+  filter(Freq > 1)
+data1_to_join <- ddply(data1_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data1_to_join <- mutate(data1_to_join,
+                        id = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\3"))
+data1_ok <- data1 %>%
+  filter(Freq == 1) %>%
+  select(-5) %>%
+  select(1,4,2,3)
+data1 <- rbind(data1_ok,data1_to_join)
+remove(data1_ok)
+remove(data1_to_join)
+data1 <- data1[order(as.character(data1$id_field)),]
+data1 <- data1 %>%
+  select(3,4,2)
+data_full <- rbind(data_full,data1)
+
+}
+
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_3.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+#4
+data_full <- data.frame()
+
+x <- 31:33
+#download database in pieces
+for (i in x) {
+progress(match(i,x), max.value = length(x))
+b <- sprintf("%02d", i-1)
+path1 <- "C:/Users/User/Desktop/bn_all_1.10.2019/msplit000000"
+path2 <- b
+path3 <- ".mrk"
+path <- paste(path1,path2,path3,sep = "")
+bn1 <- readLines(path, encoding = "UTF-8")
+data1 <- data.frame(bn1)
+remove(bn1)
+data1 <- data1 %>%
+  mutate(czy = grepl("^\\=LDR",bn1),
+         row = ifelse(grepl("^\\=LDR",bn1),seq.int(nrow(data1)),NA)) %>%
+  filter(bn1!="") %>%
+  fill(row) %>%
+  mutate(id = ifelse(grepl("^\\=009",bn1),str_replace_all(bn1,"(^\\=009 .*?\\w)(.*?)($)","\\2"),NA)) %>%
+  group_by(row) %>%
+  fill(id) %>%
+  fill(id,.direction = "up") %>%
+  ungroup() %>%
+  select(-2,-3) %>%
+  mutate(field = str_replace_all(bn1, "(=)(\\w{3})(.*)", "\\2"),
+         content = str_replace_all(bn1,"(=)(\\w{3})(\\s{2})(.*)","\\4")) %>%
+  select(2,3,4) %>%
+  mutate(id_field = paste(id,field,sep = "|"))
+
+count <- data1 %>%
+  select(4,3)
+count <- as.data.frame(table(count$id_field))
+data1 <- merge(x=data1,y=count, by.x = "id_field", by.y = "Var1")
+remove(count)
+data1_to_join <- data1 %>%
+  filter(Freq > 1)
+data1_to_join <- ddply(data1_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data1_to_join <- mutate(data1_to_join,
+                        id = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\3"))
+data1_ok <- data1 %>%
+  filter(Freq == 1) %>%
+  select(-5) %>%
+  select(1,4,2,3)
+data1 <- rbind(data1_ok,data1_to_join)
+remove(data1_ok)
+remove(data1_to_join)
+data1 <- data1[order(as.character(data1$id_field)),]
+data1 <- data1 %>%
+  select(3,4,2)
+data_full <- rbind(data_full,data1)
+
+}
+
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_4.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+
+```
+
+```{r }
+
+
+
+
 bn1 <- read.csv2("C:/Users/User/Desktop/bn_data_all_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 bn2 <- read.csv2("C:/Users/User/Desktop/bn_data_all_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 bn3 <- read.csv2("C:/Users/User/Desktop/bn_data_all_3.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-
-bn1 <- readRDS("C:\\Users\\User\\Documents\\Institute-of-Literary-Research\\bn_full_1.Rdata")
-bn2 <- readRDS("C:\\Users\\User\\Documents\\Institute-of-Literary-Research\\bn_full_2.Rdata")
-bn3 <- readRDS("C:\\Users\\User\\Documents\\Institute-of-Literary-Research\\bn_full_3.Rdata")
 
 bn1 <- as.data.frame(bn1)
 bn2 <- as.data.frame(bn2)
