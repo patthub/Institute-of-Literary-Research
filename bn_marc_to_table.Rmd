@@ -253,18 +253,12 @@ write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_4.csv", row.names = F
 
 ```{r }
 
+bn1 <- read.csv2("C:/Users/User/Desktop/bn_all_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+bn2 <- read.csv2("C:/Users/User/Desktop/bn_all_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+bn3 <- read.csv2("C:/Users/User/Desktop/bn_all_3.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+bn4 <- read.csv2("C:/Users/User/Desktop/bn_all_4.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 
-
-
-bn1 <- read.csv2("C:/Users/User/Desktop/bn_data_all_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-bn2 <- read.csv2("C:/Users/User/Desktop/bn_data_all_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-bn3 <- read.csv2("C:/Users/User/Desktop/bn_data_all_3.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-
-bn1 <- as.data.frame(bn1)
-bn2 <- as.data.frame(bn2)
-bn3 <- as.data.frame(bn3)
-
-data_full <- rbind(bn1,bn2,bn3)
+data_full <- rbind(bn1,bn2,bn3,bn4)
 
 write.csv2(data_full, file = "C:/Users/User/Desktop/bn_data_all.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 data_full <- read.csv2("C:/Users/User/Desktop/bn_kartoteka_wzorcowa.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
