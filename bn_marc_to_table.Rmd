@@ -12,6 +12,7 @@ output:
 
 ```{r BN marc processing to table}
 options(java.parameters = "-Xmx32000m")
+options(scipen = 999)
 pacman::p_load(plyr,stringr,tidyverse,reshape2,zoo,sqldf,splitstackshape,dplyr,svMisc,googlesheets)
 
 #1
@@ -70,7 +71,7 @@ data_full <- rbind(data_full,data1)
 
 }
 
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_1.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_1.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 #2
 data_full <- data.frame()
@@ -129,7 +130,7 @@ data_full <- rbind(data_full,data1)
 
 }
 
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_2.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_2.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 #3
 data_full <- data.frame()
@@ -188,7 +189,7 @@ data_full <- rbind(data_full,data1)
 
 }
 
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_3.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_3.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 #4
 data_full <- data.frame()
@@ -246,22 +247,22 @@ data_full <- rbind(data_full,data1)
 
 }
 
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_4.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_4.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 
 ```
 
 ```{r }
 
-bn1 <- read.csv2("C:/Users/User/Desktop/bn_all_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-bn2 <- read.csv2("C:/Users/User/Desktop/bn_all_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-bn3 <- read.csv2("C:/Users/User/Desktop/bn_all_3.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-bn4 <- read.csv2("C:/Users/User/Desktop/bn_all_4.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+bn1 <- read.csv2("C:/Users/User/Desktop/bn_all_1.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
+bn2 <- read.csv2("C:/Users/User/Desktop/bn_all_2.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
+bn3 <- read.csv2("C:/Users/User/Desktop/bn_all_3.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
+bn4 <- read.csv2("C:/Users/User/Desktop/bn_all_4.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
 
 data_full <- rbind(bn1,bn2,bn3,bn4)
 
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_data_all.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-data_full <- read.csv2("C:/Users/User/Desktop/bn_kartoteka_wzorcowa.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_data_all.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+data_full <- read.csv2("C:/Users/User/Desktop/bn_kartoteka_wzorcowa.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
 
 f.agg <- function(x) paste(x, collapse = "~")
 data_full2 <- dcast(data_full, id ~ field, value.var="content", fun.aggregate = f.agg)
@@ -270,7 +271,7 @@ data_full2 <- dcast(data_full, id ~ field, value.var="content")
 str_replace(data_full2$id,"(^.*?)(\\~.*?$)","\\1")
 reshape2::dcast()
 data_full2
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_data_all_table.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_data_all_table.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 ```
 
@@ -339,19 +340,19 @@ data_full2$`675` <- str_replace(data_full2$`675`,"(^.*?)(\\~.*?$)","\\1")
 data_full2$`680` <- str_replace(data_full2$`680`,"(^.*?)(\\~.*?$)","\\1")
 data_full2$`682` <- str_replace(data_full2$`682`,"(^.*?)(\\~.*?$)","\\1")
 data_full2$LDR <- str_replace(data_full2$LDR,"(^.*?)(\\~.*?$)","\\1")
-write.csv2(data_full2, file = "C:/Users/User/Desktop/bn_kartoteka_wzorcowa.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(data_full2, file = "C:/Users/User/Desktop/bn_kartoteka_wzorcowa.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 ```
 
 2. Przygotowanie list książek dla danego roku
 
 ```{r wydobycie list ksiazek}
-data_full <- read.csv2("C:/Users/User/Desktop/bn_data_all_table.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+data_full <- read.csv2("C:/Users/User/Desktop/bn_data_all_table.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
 data_full <- mutate(data_full,
                 rok = str_sub(data_full$X008,8,11))
 data_full <- data_full %>%
   filter(rok>2003&rok<2009)
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_data_2004-2008.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_data_2004-2008.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 bn_ks <- mutate(data_full,
                 czy_ks = (grepl("Ksi??ki", data_full$X380,ignore.case = TRUE)|data_full$X380=="")&substr(data_full$LDR,7,8)=="am")
 bn_ks <- bn_ks %>%
@@ -360,8 +361,8 @@ bn_ks <- bn_ks %>%
   unique()
 test <- sqldf("select X245, X260,X380,X300,LDR
               from bn_ks a")
-write.csv2(bn_ks, file = "C:/Users/User/Desktop/bn_ks_2004-2008.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-bn_ks <- read.csv2("C:/Users/User/Desktop/bn_ks_2004-2008.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+write.csv2(bn_ks, file = "C:/Users/User/Desktop/bn_ks_2004-2008.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+bn_ks <- read.csv2("C:/Users/User/Desktop/bn_ks_2004-2008.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
 
 
 bn_ks_2005_2008 <- bn_ks %>%
@@ -404,7 +405,7 @@ gatunki_lit$gatunki <- str_remove_all(gatunki_lit$gatunki, ".*?\\$a")
 gatunki_lit <- gatunki_lit[order(gatunki_lit$pole,gatunki_lit$gatunki),]
 gatunki_lit <- gatunki_lit %>%
   unique()
-#write.csv2(gatunki_lit, "C:/Users/User/Desktop/gatunki_literackie.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#write.csv2(gatunki_lit, "C:/Users/User/Desktop/gatunki_literackie.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 #Basia definiuje, kt?re gatunki s? literackie i kt?rych gatunk?w nale?y szuka?
 
 gatunki_lit <- gs_read(gs_title("gatunki_literackie_2005-2008"), ws = "gatunki_literackie")
@@ -486,7 +487,7 @@ gatunki_tfrtv <- gatunki_tfrtv[order(gatunki_tfrtv$pole,gatunki_tfrtv$gatunki),]
 gatunki_tfrtv <- gatunki_tfrtv %>%
   unique()
 
-#write.csv2(gatunki_tfrtv, "C:/Users/User/Desktop/gatunki_tfrtv.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#write.csv2(gatunki_tfrtv, "C:/Users/User/Desktop/gatunki_tfrtv.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 #Basia definiuje, kt?re gatunki s? tfrtv i kt?rych gatunk?w nale?y szuka?
 
 gatunki_tfrtv <- gs_read(gs_title("gatunki_tfrtv_2005-2008"), ws = "gatunki_tfrtv")
@@ -557,11 +558,11 @@ gwiazdkowicze <- dbGetQuery(PBL,
 
 
 
-write.csv2(UKD_lit, "C:/Users/User/Desktop/2005-2008_UKD_lit.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-write.csv2(bez_UKD_lit, "C:/Users/User/Desktop/2005-2008_bez_UKD_lit.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-write.csv2(UKD_tfrtv, "C:/Users/User/Desktop/2005-2008_UKD_tfrtv.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-write.csv2(bez_UKD_tfrtv, "C:/Users/User/Desktop/2005-2008_bez_UKD_tfrtv.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-write.csv2(reszta, "C:/Users/User/Desktop/2005-2008_reszta.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(UKD_lit, "C:/Users/User/Desktop/2005-2008_UKD_lit.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(bez_UKD_lit, "C:/Users/User/Desktop/2005-2008_bez_UKD_lit.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(UKD_tfrtv, "C:/Users/User/Desktop/2005-2008_UKD_tfrtv.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(bez_UKD_tfrtv, "C:/Users/User/Desktop/2005-2008_bez_UKD_tfrtv.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(reszta, "C:/Users/User/Desktop/2005-2008_reszta.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 ```
 
