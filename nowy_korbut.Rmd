@@ -74,7 +74,7 @@ test <- test %>%
   ungroup() %>%
   unique() %>%
   select(-dummy_column) %>%
-  mutate(korbut = str_replace_all(korbut,"([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž0-9\\)]\\.)(#)(\\d{1,2}\\.)","\\1|\\3")) %>%
+  mutate(korbut = str_replace_all(korbut,"([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž0-9][a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţ8zżźž0-9\\)]\\.)(#)(\\d{1,2}\\.)","\\1|\\3")) %>%
   mutate(korbut = str_replace_all(korbut, "#"," ")) %>%
   mutate(korbut = str_replace_all(korbut,"(\\.)([- ]{0,2})(—)", "\\1\\2|"))
 
