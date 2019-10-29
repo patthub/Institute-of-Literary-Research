@@ -194,11 +194,46 @@ write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_3.csv", row.names = F
 
 ```
 
-```{r }
-
+```{r table of records for a perticular year}
 bn1 <- read.csv2("C:/Users/User/Desktop/bn_all_1.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
 bn2 <- read.csv2("C:/Users/User/Desktop/bn_all_2.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
 bn3 <- read.csv2("C:/Users/User/Desktop/bn_all_3.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
+
+bn1 <- dcast(bn1, id ~ field, value.var="content")
+bn2 <- dcast(bn2, id ~ field, value.var="content")
+bn3 <- dcast(bn3, id ~ field, value.var="content")
+
+fields <- intersect(intersect(colnames(bn1),colnames(bn2)),colnames(bn3))
+
+bn1 <- bn1 %>%
+  select(fields) %>%
+  mutate(rok = str_sub(`008`,8,11)) %>%
+  filter(rok == 2009)
+bn2 <- bn2 %>%
+  select(fields) %>%
+  mutate(rok = str_sub(`008`,8,11)) %>%
+  filter(rok == 2009)
+bn3 <- bn3 %>%
+  select(fields) %>%
+  mutate(rok = str_sub(`008`,8,11)) %>%
+  filter(rok == 2009)
+
+bn_ks <- rbind(bn1,bn2,bn3) %>%
+  mutate(czy_ks = (grepl("Książki", `380`,ignore.case = TRUE)|is.na(`380`))&substr(LDR,7,8)=="am") %>%
+  filter(czy_ks == TRUE) %>%
+  select(-czy_ks) %>%
+  unique()
+
+write.csv2(bn_ks, file = "C:/Users/User/Desktop/bn_ks_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+
+#END
+
+```
+
+
+```{r }
+
+
 
 data_full <- rbind(bn1,bn2,bn3)
 
@@ -206,7 +241,7 @@ write.csv2(data_full, file = "C:/Users/User/Desktop/bn_data_all.csv", row.names 
 data_full <- read.csv2("C:/Users/User/Desktop/bn_kartoteka_wzorcowa.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
 
 f.agg <- function(x) paste(x, collapse = "~")
-data_full2 <- dcast(data_full, id ~ field, value.var="content", fun.aggregate = f.agg)
+data_full <- dcast(data_full, id ~ field, value.var="content", fun.aggregate = f.agg)
 
 data_full2 <- dcast(data_full, id ~ field, value.var="content")
 str_replace(data_full2$id,"(^.*?)(\\~.*?$)","\\1")
@@ -505,45 +540,4 @@ write.csv2(UKD_tfrtv, "C:/Users/User/Desktop/2005-2008_UKD_tfrtv.csv", row.names
 write.csv2(bez_UKD_tfrtv, "C:/Users/User/Desktop/2005-2008_bez_UKD_tfrtv.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 write.csv2(reszta, "C:/Users/User/Desktop/2005-2008_reszta.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
-```
-
-```{r}
-#deleni poli na podpole
-#field 600 <- number of field
-#remember to change the name of the column from X600 to e.g. X787
-marc_field <- cz_database %>%
-  select(id,SIF,X600)%>%
-  filter(X600!="")
-marc_field$X600<-str_replace_all(marc_field$X600,"(^|\\|)","~\\1")
-marc_field<- cSplit(marc_field,"X600",sep = "~",direction = "long")
-marc_field<- marc_field%>%
-  filter(X600!="")
-marc_field$X600<-str_remove_all(marc_field$X600,"^\\|")
-marc_field <- mutate(marc_field,
-               indicator = str_replace_all(marc_field$X600,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(cz_database$X600,"\\${2}.")
-subfield_list<- unique(unlist(subfield_list))
-empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
-colnames(empty_table) <-subfield_list
-
-marc_field<-cbind(marc_field,empty_table)
-
-subfield_list_char <- paste("(",subfield_list,")",sep = "")
-subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
-
-x <- 1:length(subfield_list)
-
-for (i in x) {
-  marc_field$X600 <- str_replace(marc_field$X600,subfield_list_char[i],"|\\1")
-  progress(match(i,x), max.value = length(x)) 
-}
-for (i in x) {
-  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-string_a <- "(^)(.*?\\|"
-string_b <- subfield_list_char2[i]
-string_c <- ")(.*?)(\\,{0,1})((\\|\\${2})(.*)|$)"
-string <- paste(string_a,string_b,string_c,sep = "")
-marc_field[,i+4] <- ifelse(grepl(subfield_list_char2[i],marc_field$X600),str_replace_all(gsub(string,"\\3",marc_field$X600),"\\${2}.", "~"),NA)
-progress(match(i,x), max.value = length(x))  
-}
 ```
