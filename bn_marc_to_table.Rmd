@@ -23,7 +23,7 @@ x <- 1:11
 for (i in x) {
 progress(match(i,x), max.value = length(x))
 b <- sprintf("%02d", i-1)
-path1 <- "C:/Users/User/Desktop/bn_all_1.10.2019/msplit000000"
+path1 <- "C:/Users/User/Desktop/bn_all_30.10.2019/msplit000000"
 path2 <- b
 path3 <- ".mrk"
 path <- paste(path1,path2,path3,sep = "")
@@ -71,7 +71,7 @@ data_full <- rbind(data_full,data1)
 
 }
 
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_1.csv", row.names = F, na = '', fileEncoding = 'UCS-2LE')
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_1.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 #2
 data_full <- data.frame()
@@ -82,7 +82,7 @@ x <- 12:22
 for (i in x) {
 progress(match(i,x), max.value = length(x))
 b <- sprintf("%02d", i-1)
-path1 <- "C:/Users/User/Desktop/bn_all_1.10.2019/msplit000000"
+path1 <- "C:/Users/User/Desktop/bn_all_30.10.2019/msplit000000"
 path2 <- b
 path3 <- ".mrk"
 path <- paste(path1,path2,path3,sep = "")
@@ -130,7 +130,7 @@ data_full <- rbind(data_full,data1)
 
 }
 
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_2.csv", row.names = F, na = '', fileEncoding = 'UCS-2LE')
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_2.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 #3
 data_full <- data.frame()
@@ -141,7 +141,7 @@ x <- 23:34
 for (i in x) {
 progress(match(i,x), max.value = length(x))
 b <- sprintf("%02d", i-1)
-path1 <- "C:/Users/User/Desktop/bn_all_1.10.2019/msplit000000"
+path1 <- "C:/Users/User/Desktop/bn_all_30.10.2019/msplit000000"
 path2 <- b
 path3 <- ".mrk"
 path <- paste(path1,path2,path3,sep = "")
@@ -189,7 +189,7 @@ data_full <- rbind(data_full,data1)
 
 }
 
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_3.csv", row.names = F, na = '', fileEncoding = 'UCS-2LE')
+write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_3.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 ```
 
