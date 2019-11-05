@@ -4,31 +4,29 @@ output: html_notebook
 ---
 ```{r}
 #biblioteki
+options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-library(googlesheets)
-library(zoo)
-library(openxlsx)
-library(stringr)
-library(splitstackshape)
-library(plyr)
-library(dplyr)
-library(sqldf)
-library(stringdist)
-library(fuzzyjoin)
-library(data.table)
-library(svMisc)
-library(tidyverse)
-library(rvest)
-library(RSelenium)
+pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,rvest,RSelenium,jsonlite)
+#połączenie z bazą PBL
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 
-pbl_tworcy <- read.csv2("C:/Users/User/Desktop/tworcy_pbl.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE, sep = ",")
+#pbl_tworcy <- read.csv2("C:/Users/User/Desktop/tworcy_pbl.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE, sep = ",")
+pbl_tworcy <- dbGetQuery(PBL,
+                            "select *
+                            from pbl_tworcy tw")
 
 #tworzenie pustej tabeli
 wzorcowe_bn <- data.frame(pbl_id = character(), pbl_nazwisko = character(), pbl_imie = character(), bn_json = character(), stringsAsFactors=FALSE)
 #pętla for
 
-rD <- rsDriver(port=4444L,browser="chrome", chromever="76.0.3809.25")
+rD <- rsDriver(port=4444L,browser="chrome", chromever="78.0.3904.11")
 #binman::list_versions("chromedriver")
+#rD$server$stop()
+#rm(rD)
+#gc()
 remDr <- rD$client
 
 x <- 1:length(pbl_tworcy$TW_TWORCA_ID)
@@ -56,18 +54,16 @@ wzorcowe_bn <- read.csv2("C:/Users/cezar/Downloads/wzorcowe_bn.csv", encoding = 
 ```
 
 ```{r}
-library(rjson)
-library(jsonlite)
-options(scipen = 999)
-
+wzorcowe_bn$json_text <- as.character(wzorcowe_bn$json_text)
 bn_wzorcowe <- wzorcowe_bn %>%
-  filter(nchar(json_text)>41)
+  filter(nchar(as.character(json_text))>41)
 
 bn_puste <- wzorcowe_bn %>%
-  filter(nchar(json_text)<=41)
+  filter(nchar(as.character(json_text))<=41)
 
 bn_json_full <- data.frame(pbl_id = character(), pbl_nazwisko = character(), pbl_imie = character(), stringsAsFactors=FALSE)
 x <- 1:length(bn_wzorcowe$V1)
+
 for (i in x) {
 progress(match(i,x), max.value = length(x)) 
 tryCatch({
