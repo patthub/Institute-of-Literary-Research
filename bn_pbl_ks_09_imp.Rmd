@@ -7,7 +7,8 @@ output: html_notebook
 #biblioteki
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx)
+pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,ggmap)
+register_google("AIzaSyBeOPHjKFuglF4XLIeJajT912J3dKaJzHo")
 
 #wgranie zbiorów książek
 bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
@@ -362,51 +363,22 @@ marc_field_700 <- marc_field_700 %>%
 marc_field_700$name <- str_replace(marc_field_700$name,"(\\))(\\.$)","\\1")
 
 marc_fields <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
+  unique() %>%
+  mutate(name = str_replace(name,"([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
+#utożsamianie po nazewnictwie
+
+name_match <- merge(marc_fields,ludzie_bn_pbl,by = "name") %>%
+  select(id) %>%
   unique()
 
-
-
-###TUTAJ###
-
-test <- ludzie_bn_pbl %>%
-  select(czy_ten_sam) %>%
-  unique()
-
-
-#szukanie po listach osób i słowach
-gwiazdkowicze <- dbGetQuery(PBL,
-                            "select *
-                            from pbl_tworcy tw
-                            where tw.tw_uwagi like '%GWIAZDKOWICZ%'")
-gwiazdkowicze <- data.frame(nazwisko = ifelse(is.na(gwiazdkowicze$TW_ROK_URODZIN),paste(gwiazdkowicze$TW_NAZWISKO,", ",gwiazdkowicze$TW_IMIE, sep = ""), paste(gwiazdkowicze$TW_NAZWISKO,", ",gwiazdkowicze$TW_IMIE,"$d(",gwiazdkowicze$TW_ROK_URODZIN, sep = "")))
-
-korbut <- gs_read(gs_title("Korbut + Z?oty S?ownik"), ws = "Korbut")
-korbut <- data.frame(nazwisko = ifelse(is.na(korbut$`data urodzenia (yyyy-mm-dd)`),paste(korbut$nazwisko,", ",korbut$imi?, sep = ""), paste(korbut$nazwisko,", ",korbut$imi?,"$d(",substr(korbut$`data urodzenia (yyyy-mm-dd)`,1,4), sep = "")))
-korbut$nazwisko <- str_remove_all(korbut$nazwisko, ", NA")
-zloty_slownik <- gs_read(gs_title("Korbut + Z?oty S?ownik"), ws = "Wsp??. pol. pis. i bad. lit.")
-zloty_slownik <- data.frame(nazwisko = ifelse(is.na(zloty_slownik$`data urodzenia (yyyy-mm-dd)`),paste(zloty_slownik$nazwisko,", ",zloty_slownik$imi?, sep = ""), paste(zloty_slownik$nazwisko,", ",zloty_slownik$imi?,"$d(",substr(zloty_slownik$`data urodzenia (yyyy-mm-dd)`,1,4), sep = "")))
-zloty_slownik$nazwisko <- str_remove_all(zloty_slownik$nazwisko, ", NA")
-lista_nazwisk <- rbind(data.frame(nazwisko = gwiazdkowicze$nazwisko), data.frame(nazwisko = korbut$nazwisko), data.frame(nazwisko = zloty_slownik$nazwisko)) %>%
-  unique()
-rekordy_1 <- sqldf("select *
+rekordy_nazwiska <- sqldf("select *
                     from reszta a
-                    join lista_nazwisk b on a.X100 like ('%'||nazwisko||'%')")
-rekordy_2 <- sqldf("select *
-                    from reszta a
-                    join lista_nazwisk b on a.X600 like ('%'||nazwisko||'%')")
-rekordy_2 <- rekordy_2 %>%
-  select(-length(rekordy_2))
-rekordy_1 <- rekordy_1 %>%
-  select(-length(rekordy_1))
+                    where a.id in (select b.id from name_match b)")
 
-rekordy_nazwiska <- rbind(rekordy_1, rekordy_2) %>%
-  unique()
-
-rekordy_dziedziny <- mutate(reszta,
-                    czy = grepl("\\$a002\\/003", reszta$X080)|grepl("\\$a01\\/02\\+050\\+070", reszta$X080)|grepl("\\$a06)", reszta$X080)|grepl("\\$a1", reszta$X080)|grepl("\\$a2", reszta$X080)|grepl("\\$a3016\\.7", reszta$X080)|grepl("\\$a37\\.091", reszta$X080)|grepl("\\$a378", reszta$X080)|grepl("\\$a39", reszta$X080)|grepl("\\$a929", reszta$X080)|grepl("\\$a94\\(438\\)\\:\\:008", reszta$X080))
-rekordy_dziedziny <- rekordy_dziedziny %>%
+rekordy_dziedziny <- reszta %>%
+  mutate(czy = grepl("\\$a002\\/003", X080)|grepl("\\$a01\\/02\\+050\\+070", X080)|grepl("\\$a06)", X080)|grepl("\\$a1", X080)|grepl("\\$a2", X080)|grepl("\\$a3016\\.7", X080)|grepl("\\$a37\\.091", X080)|grepl("\\$a378", X080)|grepl("\\$a39", X080)|grepl("\\$a929", X080)|grepl("\\$a94\\(438\\)\\:\\:008", X080))  %>%
   filter(czy==TRUE) %>%
-  select(-length(rekordy_dziedziny)) %>%
+  select(-czy) %>%
   unique()
 
 rekordy_dziedziny <- sqldf("select *
@@ -431,38 +403,63 @@ reszta <- sqldf("select *
                 where a.id not in (select b.id from rekordy_nazwiska b)
                 and a.id not in (select b.id from rekordy_dziedziny b)
                 and a.id not in (select b.id from rekordy_slowa b)")
-#bn_ks <- bn_ks %>%
-#  select(id, X041, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
-UKD_lit_small <- UKD_lit %>%
-  select(id, X041, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
-bez_UKD_lit_small <- bez_UKD_lit %>%
-  select(id, X041, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
-#UKD_tfrtv <- UKD_tfrtv %>%
-#  select(id, X041, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
-#bez_UKD_tfrtv <- bez_UKD_tfrtv %>%
-#  select(id, X041, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
-#rekordy_nazwiska <- rekordy_nazwiska %>%
-#  select(id, X041, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
-#rekordy_dziedziny <- rekordy_dziedziny %>%
-#  select(id, X041, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
-#rekordy_slowa <- rekordy_slowa %>%
-#  select(id, X041, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
-#reszta <- reszta %>%
-#  select(id, X041, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
 
-#write.csv2(bn_ks, "C:/Users/cezar/Desktop/2005-2008_wszystkie.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#write.csv2(UKD_lit, "C:/Users/cezar/Desktop/2005-2008_UKD_lit.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#write.csv2(bez_UKD_lit, "C:/Users/cezar/Desktop/2005-2008_bez_UKD_lit.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#write.csv2(UKD_tfrtv, "C:/Users/cezar/Desktop/2005-2008_UKD_tfrtv.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#write.csv2(bez_UKD_tfrtv, "C:/Users/cezar/Desktop/2005-2008_bez_UKD_tfrtv.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#write.csv2(rekordy_nazwiska, "C:/Users/cezar/Desktop/2005-2008_rekordy_nazwiska.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#write.csv2(rekordy_dziedziny, "C:/Users/cezar/Desktop/2005-2008_rekordy_dziedziny.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#write.csv2(rekordy_slowa, "C:/Users/cezar/Desktop/2005-2008_rekordy_slowa.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#write.csv2(reszta, "C:/Users/cezar/Desktop/2005-2008_reszta.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#usunięcie zagranicznych zapisów, które nie są polonikami
+
+bn_ok <- rbind(UKD_lit %>% mutate(skad = "UKD_lit"),bez_UKD_lit %>% mutate(skad = "bez_UKD_lit"),UKD_tfrtv %>% mutate(skad = "UKD_tfrtv"),bez_UKD_tfrtv %>% mutate(skad = "bez_UKD_tfrtv"),rekordy_nazwiska %>% mutate(skad = "rekordy_nazwiska"),rekordy_dziedziny %>% mutate(skad = "rekordy_dziedziny"),rekordy_slowa %>% mutate(skad = "rekordy_slowa")) %>%
+  unique()
+
+#lista miejscowości
+
+to_be <- function(df, group) {
+  if(group)
+}
+
+test <- bn_ok %>%
+  if(X501=="") {
+    filter(!grepl("pl",substr(X008,16,18)));
+  } %>%
+  filter(!grepl("pol",substr(X008,36,38)))
+
+test <- bn_ok %>%
+  filter(if (X501=="") !grepl("pl",substr(X008,16,18))) %>%
+  filter(!grepl("pol",substr(X008,36,38))) %>%
+  filter(!grepl("pol",X041)) %>%
+  filter(!grepl("pl",X044)) %>%
+  filter(!grepl("pol",X500)) %>%
+  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
+
+test <- bn_ok %>%
+  mutate(kraj = substr(X008,16,18)) %>%
+  select(kraj) %>%
+  unique()
+
+
+
+
+
+BN_PBL_wydawnictwa <- merge( x = wydaw_3, y = PBL_wydawnictwa, by = 'nazwa_prosta', sort = FALSE, all.x = TRUE, allow.cartesian = TRUE)
+BN_PBL_wydawnictwa$to_samo <- BN_PBL_wydawnictwa$wydawnictwo==BN_PBL_wydawnictwa$WY_NAZWA
+BN_PBL_wydawnictwa <- BN_PBL_wydawnictwa[order(as.integer(as.character(BN_PBL_wydawnictwa$licznik)), -BN_PBL_wydawnictwa$to_samo, -BN_PBL_wydawnictwa$WY_LICZBA_ZAPISOW),]
+
+BN_PBL_wydawnictwa %$%  
+    { as.integer(licznik) == dplyr::lag(as.integer(licznik), 1) & nazwa_prosta==lag(nazwa_prosta)} %>% 
+    as.numeric() %>% 
+    {.} -> BN_PBL_wydawnictwa$same
+BN_PBL_wydawnictwa$same[1] <- 0
+
+BN_PBL_wydawnictwa <- BN_PBL_wydawnictwa %>%
+  filter(same==0)
+
+wy_wydawnictwo_id <- BN_PBL_wydawnictwa %>%
+  select(licznik, WY_WYDAWNICTWO_ID)
+
+wy_wydawnictwo_id <- wy_wydawnictwo_id[order(as.integer(as.character(wy_wydawnictwo_id$licznik))),]
+
 
 ```
 
-```{r aktualizowanie zbior?w po selekcji}
+```{r aktualizowanie zbiorow po selekcji}
 
 wszystkie <- rbind(UKD_lit_small,bez_UKD_lit_small)
 options(scipen = 999)
@@ -1883,38 +1880,34 @@ test <- data %>%
 za_instytucja <- merge(x=za_instytucja,y=test,by = "licznik", all = TRUE)
 
 #25
-BN_wydawnictwo <- data.frame(X260 = data$X260, licznik = data$licznik)
-BN_wydawnictwo$X260 <- str_replace_all(BN_wydawnictwo$X260,"s\\.n\\.", "b.w.")
-BN_wydawnictwo$X260 <- str_replace_all(BN_wydawnictwo$X260,"s\\.l\\.", "b.m.")
-BN_wydawnictwo$X260 <- str_replace_all(BN_wydawnictwo$X260,"S\\.l\\.", "b.m.")
-BN_wydawnictwo$X260 <- str_remove(BN_wydawnictwo$X260,"^\\\\+")
+BN_wydawnictwo <- bn_ok %>%
+  select(id, X260) %>%
+  mutate(X260 = str_replace_all(X260,"s\\.n\\.", "b.w."), 
+         X260 = str_replace_all(X260,"s\\.l\\.", "b.m."), 
+         X260 = str_replace_all(X260,"S\\.l\\.", "b.m."), 
+         X260 = str_remove(X260,"^\\\\+"), 
+         rok_wydania = str_extract_all(X260, "(?<=\\$c).*(?=\\$e)|(?<=\\$c).*"), 
+         bez_roku = str_replace_all(X260, ".\\$c.*", ""), 
+         ile_wydawnictw = str_count(BN_wydawnictwo$bez_roku, "\\$b"),
+         ile_miejsc = str_count(bez_roku, "\\$a"),
+         kolejnosc = str_replace_all(as.character(str_extract_all(bez_roku, "\\$.")), "[^a-z]", ""),
+         bez_roku = str_replace_all(bez_roku, ";\\$b", ":$b"))
 
-BN_wydawnictwo <- mutate(BN_wydawnictwo,
-                      rok_wydania = str_extract_all(BN_wydawnictwo$X260, "(?<=\\$c).*(?=\\$e)|(?<=\\$c).*"),
-                      bez_roku = str_replace_all(BN_wydawnictwo$X260, ".\\$c.*", ""))
-BN_wydawnictwo <- mutate(BN_wydawnictwo,
-                      ile_wydawnictw = str_count(BN_wydawnictwo$bez_roku, "\\$b"),
-                      ile_miejsc = str_count(BN_wydawnictwo$bez_roku, "\\$a"),
-                      kolejnosc = str_replace_all(as.character(str_extract_all(BN_wydawnictwo$bez_roku, "\\$.")), "[^a-z]", ""))
-BN_wydawnictwo$bez_roku <- str_replace_all(BN_wydawnictwo$bez_roku, ";\\$b", ":$b")
+a <- BN_wydawnictwo %>%
+  mutate(wydaw_podziel = ifelse(ile_wydawnictw>ile_miejsc|kolejnosc=="caabb", str_replace_all(bez_roku, "(\\$a)(.*?)( :\\$b.*?)( :\\$b)", "\\1\\2\\3 ;$a\\2\\4"),bez_roku))
+b <- a %>%
+  mutate(wydawnictwo_test = str_replace_all(wydaw_podziel, "(\\$b)(.*?)( ;\\$a)", "\\1\\2|\\3"))
 
-
-
-a <- mutate(BN_wydawnictwo,
-                      wydaw_podziel = ifelse(BN_wydawnictwo$ile_wydawnictw>BN_wydawnictwo$ile_miejsc|BN_wydawnictwo$kolejnosc=="caabb", str_replace_all(BN_wydawnictwo$bez_roku, "(\\$a)(.*?)( :\\$b.*?)( :\\$b)", "\\1\\2\\3 ;$a\\2\\4"),BN_wydawnictwo$bez_roku))
-b <- mutate(a,
-            wydaw_podziel2 = str_replace_all(a$wydaw_podziel, "(\\$b)(.*?)( ;\\$a)", "\\1\\2|\\3"))
-
-BN_wydawnictwo <- data.frame(cbind(b$licznik, b$rok_wydania, b$wydaw_podziel2))
-colnames(BN_wydawnictwo) <- c("licznik", "rok_wydania", "wydawnictwo_test")
+BN_wydawnictwo <- b %>%
+  select(licznik,rok_wydania,wydawnictwo_test)
 
 wydaw_2 <- cSplit(BN_wydawnictwo, "wydawnictwo_test", sep = "|", direction = "long")
 
-wydaw_3 <- mutate(wydaw_2,
-                  wydawnictwo = str_extract_all(wydaw_2$wydawnictwo_test, "(?<=\\$b)(.*)"),
-                  miejsce_wydania = str_replace_all(str_extract_all(wydaw_2$wydawnictwo_test, "(?<=\\$a)(.*)(?= {0,1}: {0,1}\\$b)|(?<=\\$a)(.*)($)")," ;\\$a", ", "),
-                  nazwa_prosta = str_to_lower(str_replace_all(str_replace_all(unlist(wydaw_2$wydawnictwo_test), "\\$\\w", ""), "\\W", "")),
-                  lp = 1:lengths(wydaw_2))
+wydaw_3 <- wydaw_2 %>%
+  mutate(wydawnictwo = str_extract_all(wydawnictwo_test, "(?<=\\$b)(.*)"),
+         miejsce_wydania = str_replace_all(str_extract_all(wydawnictwo_test, "(?<=\\$a)(.*)(?= {0,1}: {0,1}\\$b)|(?<=\\$a)(.*)($)")," ;\\$a", ", "),
+         nazwa_prosta = str_to_lower(str_replace_all(str_replace_all(unlist(wydawnictwo_test), "\\$\\w", ""), "\\W", "")),
+         lp = 1:lengths(wydaw_2))
 
 BN_PBL_wydawnictwa <- merge( x = wydaw_3, y = PBL_wydawnictwa, by = 'nazwa_prosta', sort = FALSE, all.x = TRUE, allow.cartesian = TRUE)
 BN_PBL_wydawnictwa$to_samo <- BN_PBL_wydawnictwa$wydawnictwo==BN_PBL_wydawnictwa$WY_NAZWA

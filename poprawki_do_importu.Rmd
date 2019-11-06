@@ -8,8 +8,9 @@ options(scipen = 999)
 pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,stringi)
 
 #połączenie z bazą PBL
-jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/R/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 
 import_start <- read.csv2("C:/Users/cezar/Desktop/import_start.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
@@ -21,8 +22,7 @@ import_start <- import_start %>%
 pbl_import <- RJDBC::dbGetQuery(PBL,
                             "select z.za_zapis_id, z.za_uwagi, z.za_ro_rok
                             from pbl_zapisy z
-                            where z.za_uwagi like '%import%'")
-pbl_import <- pbl_import %>%
+                            where z.za_uwagi like '%import%'")%>%
   mutate(BN_id = str_extract(ZA_UWAGI,"(?<=BN: )(\\d+)")) %>%
   mutate(pracownik_pbl = str_extract(ZA_UWAGI, "(?<=akceptuje:)([A-Z]*)")) %>%
   mutate(temp_id = paste(BN_id,ZA_RO_ROK,sep = "|"))
@@ -118,7 +118,7 @@ test <- test %>%
 ```
 
 ```{r}
-# wykorzystać INO do tego, żeby nie buble nie wchodziły do bazy
+# wykorzystać INO do tego, żeby buble nie wchodziły do bazy
 # nie mogę korzystać z listy polskich miejscowości, bo Warschau to Warszawa, a na liście tego nie będzie
 my.packages <- rownames(installed.packages())
 install.packages(my.packages)
