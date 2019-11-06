@@ -8,7 +8,6 @@ output: html_notebook
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
 pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,ggmap)
-register_google("AIzaSyBeOPHjKFuglF4XLIeJajT912J3dKaJzHo")
 
 #wgranie zbiorów książek
 bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
