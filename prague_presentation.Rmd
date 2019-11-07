@@ -3,7 +3,6 @@ title: "R Notebook"
 output: html_notebook
 ---
 ```{r}
-#hi Vojta, I don't need to install anything
 #libraries
 options(scipen = 999)
 pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,rvest,RSelenium,RJDBC,rjson,jsonlite,sqldf,XML,methods)
