@@ -3,6 +3,7 @@ title: "R Notebook"
 output: html_notebook
 ---
 ```{r}
+#hi Vojta, I don't need to install anything
 #libraries
 options(scipen = 999)
 pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,rvest,RSelenium,RJDBC,rjson,jsonlite,sqldf,XML,methods)
@@ -48,6 +49,7 @@ for (i in x) {
 ```
 
 ```{r clearing the data}
+
 authority_nlp$json_text <- as.character(authority_nlp$json_text)
 
 nlp_people_authority <- authority_nlp %>%
