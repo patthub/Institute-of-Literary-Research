@@ -1,0 +1,96 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r lesson 1}
+install.packages("Gabina")
+library(splitstackshape)
+person1 <- "Gabina"
+person2 <- "Ania"
+
+persons <- c("Gabina", "Ania")
+
+persons <- data.frame(name = c("Gabina|Vojta", "Czarek|Ania"),gender = c("female|male","male|female"))
+persons3 <- data.frame(name = c("Gabina", "Ania"),gender = "female|female",test = c("test1", "test2", "test3"))
+
+persons <- read.csv2("C:/Users/Cezary/Desktop/names.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) %>%
+  select(1,2) %>%
+  cSplit(.,c("name", "gender"),sep = "|", direction = "long")
+
+
+name1 <- str_replace(persons$name,"(^.*)(\\|)(.*$)","\\1")
+name2 <- str_replace(persons$name,"(^.*)(\\|)(.*$)","\\3")
+gender1 <-str_replace(persons$gender,"(^.*)(\\|)(.*$)","\\1")
+gender2 <- str_replace(persons$gender,"(^.*)(\\|)(.*$)","\\3")
+persons2 <- data.frame(name = c(name1,name2),gender = c(gender1,gender2))
+
+test1 <- persons %>%
+  cSplit(.,c("name", "gender"),sep = "|", direction = "long")
+
+name <- persons$name
+name <- str_extract(name,"(.*)(?=.*$)")
+
+plist <- cSplit(plist,"name_single",sep = "|",direction = "long")
+
+number1 <- 1
+
+persons <- as.list(persons)
+```
+
+```{r lesson 2}
+pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,rvest,RSelenium,RJDBC,rjson,jsonlite,sqldf,XML,methods)
+
+#empty table
+json_file <- data.frame(nlp_json = character(), stringsAsFactors=FALSE)
+#for loop
+#binman::rm_platform("phantomjs")
+#wdman::selenium(retcommand = TRUE)
+rD <- rsDriver(port=4444L,browser="chrome", chromever="78.0.3904.11")
+#binman::list_versions("chromedriver")
+remDr <- rD$client
+
+url <- c("https://data.bn.org.pl/api/bibs.json?author=seifert+jaroslav&amp;limit=100","https://data.bn.org.pl/api/bibs.json?limit=100&amp;subject=seifert+jaroslav")
+
+
+x <- 1:length(url)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  webpage <- url[i]
+  
+  remDr$navigate(webpage)
+  webElem <- remDr$findElement(using = 'css selector', "body:nth-child(2) > pre:nth-child(1)")
+  json_text <- webElem$getElementText()
+  json_text <- as.character(json_text)
+
+  iteration <- cbind(i, json_text)
+  json_file <- rbind(json_file,iteration)
+}
+
+
+
+nlp_json <- fromJSON(as.character(json_file$json_text)[1])
+nlp_json <- nlp_json$bibs
+####
+test <- nlp_json[1]
+names(test)
+df <- data.frame(matrix(unlist(test), nrow=length(test), byrow=T))  
+  
+data.frame(id=names(l), nobs=unlist(l))
+  
+df <- data.frame(matrix(unlist(nlp_json[1]), nrow=length(nlp_json[2]), byrow=T))
+df <- as.data.frame(as.matrix(nlp_json))
+onelist <- data.frame(list(df$V1))
+
+nlp_json2 <- nlp_json$
+
+nlp_json2 <- data.frame(nlp_json$bibs)
+################
+word.list <- list(letters[1:4], letters[1:5], letters[1:2], letters[1:6])
+n.obs <- sapply(word.list, length)
+seq.max <- seq_len(max(n.obs))
+mat <- t(sapply(word.list, "[", i = seq.max))
+####################
+test <- data.frame(nlp_json[1])
+```
+
