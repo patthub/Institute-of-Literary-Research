@@ -276,16 +276,24 @@ X100 <- pbl_books %>%
   unique() %>%
   mutate(X700 = ifelse(grepl("\\|",X100),str_replace(X100,"^(.*?)(\\|)(.*$)","\\3"),NA),
          X100 = ifelse(grepl("\\|",X100),str_replace(X100,"^(.*?)(\\|)(.*$)","\\1"),as.character(X100)),
-         X100 = ifelse(X100=="NA",NA,as.character(X100)),
-         razem = ifelse(!is.na(X700),paste(X100,X700,sep = "|"),as.character(X100)))
+         X100 = ifelse(X100=="NA",NA,as.character(X100)))
 #X245
 #10$aMasaż ironią :$bwybór fraszek i aforyzmów /$cZbigniew Kurzyński ; wstępem opatrzył Stanisław Stanik ; [il. Piotr Szałkowski].
-X245 <- merge(pbl_books,X100,by = "rekord_id",all = TRUE) %>%
-  select(rekord_id,autor_nazwisko,autor_imie,tytul,wspoltworcy,razem) %>%
+X245 <- pbl_books %>%
+  select(rekord_id,autor_nazwisko,autor_imie,tytul,wspoltworcy,ZA_INSTYTUCJA) %>%
   unique() %>%
-  mutate(tytul_ok = ifelse(substr(tytul,nchar(tytul),nchar(tytul))=="]",trim(str_replace(tytul,"(^.*?)(\\[.*?$)","\\1")),
-                           ifelse(substr(tytul,1,1)=="[",trim(str_replace(tytul,"(^.*?\\])(.*?$)","\\2")),as.character(tytul))),
-         autor = ifelse(!is.na(razem),str_replace_all(str_remove_all(razem," ; \\$4aut"),"(..)(\\$a)","\\2"),NA))
+  mutate(tytul_ok = str_remove(paste("10$a",ifelse(substr(tytul,nchar(tytul),nchar(tytul))=="]",trim(str_replace(tytul,"(^.*?)(\\[.*?$)","\\1")),
+                           ifelse(substr(tytul,1,1)=="[",trim(str_replace(tytul,"(^.*?\\])(.*?$)","\\2")),as.character(tytul)))," /",sep = ""),"10\\$a \\/"),
+         autor = ifelse(!is.na(autor_nazwisko)&!is.na(autor_imie),paste("$c",autor_imie," ",autor_nazwisko,sep = ""),
+                        ifelse(!is.na(autor_nazwisko)&is.na(autor_imie),paste("$c",autor_nazwisko,sep = ""),"")),
+         wspoltworcy = ifelse(is.na(wspoltworcy),"",as.character(wspoltworcy)),
+         ZA_INSTYTUCJA = ifelse(is.na(ZA_INSTYTUCJA),"",as.character(ZA_INSTYTUCJA))) %>%
+  select(rekord_id,tytul_ok,autor,wspoltworcy,ZA_INSTYTUCJA) %>%
+  mutate(X245 = paste(tytul_ok,autor," ; ",wspoltworcy," ; ",ZA_INSTYTUCJA,".", sep = ""),
+         X245 = str_replace(X245,"( ;  ; )(\\.)|( ; )(\\.)","\\2")) %>%
+  select(rekord_id,X245)
+
+
 
 #TUTAJ#
   
