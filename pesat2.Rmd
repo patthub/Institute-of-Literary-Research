@@ -14,6 +14,8 @@ pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqld
 jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 trim <- function (x) gsub("^\\s+|\\s+$", "", x)
+pbl_hp <- read.csv2("C:/Users/Cezary/Desktop/pbl_subject_headings.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+
 ```
 
 ```{r pbl books}
@@ -22,7 +24,7 @@ pbl_books1 <- dbGetQuery(PBL,
                           tw.tw_imie \"tworca_imie\", to_char(a.am_autor_id) \"autor_id\", a.am_nazwisko \"autor_nazwisko\", 
                           a.am_imie \"autor_imie\", z.za_tytul \"tytul\", z.za_opis_wspoltworcow \"wspoltworcy\", fo.fo_nazwa \"funkcja_osoby\", 
                           to_char(os.os_osoba_id) \"wspoltworca_id\", os.os_nazwisko \"wspoltworca_nazwisko\", os.os_imie \"wspoltworca_imie\", 
-                          z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id
+                          z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id,z.ZA_UZYTK_WPIS_DATA,z.ZA_UZYTK_MOD_DATA
                         from pbl_zapisy z
                         join IBL_OWNER.pbl_zapisy_tworcy zt on zt.zatw_za_zapis_id=z.za_zapis_id
                         join IBL_OWNER.pbl_tworcy tw on zt.zatw_tw_tworca_id=tw.tw_tworca_id
@@ -42,7 +44,7 @@ pbl_books2 <- dbGetQuery(PBL,
                             tw.tw_imie \"tworca_imie\", to_char(a.am_autor_id) \"autor_id\", a.am_nazwisko \"autor_nazwisko\", 
                             a.am_imie \"autor_imie\", z.za_tytul \"tytul\", z.za_opis_wspoltworcow \"wspoltworcy\", to_char(null) \"funkcja_osoby\", 
                             to_char(null) \"wspoltworca_id\", to_char(null) \"wspoltworca_nazwisko\", to_char(null) \"wspoltworca_imie\", 
-                            z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id
+                            z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id,z.ZA_UZYTK_WPIS_DATA,z.ZA_UZYTK_MOD_DATA
                           from pbl_zapisy z
                           join IBL_OWNER.pbl_zapisy_tworcy zt on zt.zatw_za_zapis_id=z.za_zapis_id
                           join IBL_OWNER.pbl_tworcy tw on zt.zatw_tw_tworca_id=tw.tw_tworca_id
@@ -59,7 +61,7 @@ pbl_books3 <- dbGetQuery(PBL,
                                     tw.tw_imie \"tworca_imie\", to_char(null) \"autor_id\", to_char(null) \"autor_nazwisko\", 
                                     to_char(null) \"autor_imie\", z.za_tytul \"tytul\", z.za_opis_wspoltworcow \"wspoltworcy\", fo.fo_nazwa \"funkcja_osoby\", 
                                     to_char(os.os_osoba_id) \"wspoltworca_id\", os.os_nazwisko \"wspoltworca_nazwisko\", os.os_imie \"wspoltworca_imie\", 
-                                    z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id 
+                                    z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id ,z.ZA_UZYTK_WPIS_DATA,z.ZA_UZYTK_MOD_DATA
                             from pbl_zapisy z
                             join IBL_OWNER.pbl_zapisy_tworcy zt on zt.zatw_za_zapis_id=z.za_zapis_id
                             join IBL_OWNER.pbl_tworcy tw on zt.zatw_tw_tworca_id=tw.tw_tworca_id
@@ -77,7 +79,7 @@ pbl_books4 <- dbGetQuery(PBL,
                                     tw.tw_imie \"tworca_imie\", to_char(null) \"autor_id\", to_char(null) \"autor_nazwisko\", 
                                     to_char(null) \"autor_imie\", z.za_tytul \"tytul\", z.za_opis_wspoltworcow \"wspoltworcy\", to_char(null) \"funkcja_osoby\", 
                                     to_char(null) \"wspoltworca_id\", to_char(null) \"wspoltworca_nazwisko\", to_char(null) \"wspoltworca_imie\", 
-                                    z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id 
+                                    z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id ,z.ZA_UZYTK_WPIS_DATA,z.ZA_UZYTK_MOD_DATA
                             from pbl_zapisy z
                             join IBL_OWNER.pbl_zapisy_tworcy zt on zt.zatw_za_zapis_id=z.za_zapis_id
                             join IBL_OWNER.pbl_tworcy tw on zt.zatw_tw_tworca_id=tw.tw_tworca_id
@@ -114,7 +116,7 @@ pbl_books1 <- dbGetQuery(PBL,
                           to_char(null) \"tworca_imie\", to_char(a.am_autor_id) \"autor_id\", a.am_nazwisko \"autor_nazwisko\", 
                           a.am_imie \"autor_imie\", z.za_tytul \"tytul\", z.za_opis_wspoltworcow \"wspoltworcy\", fo.fo_nazwa \"funkcja_osoby\", 
                           to_char(os.os_osoba_id) \"wspoltworca_id\", os.os_nazwisko \"wspoltworca_nazwisko\", os.os_imie \"wspoltworca_imie\", 
-                          z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id
+                          z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id,z.ZA_UZYTK_WPIS_DATA,z.ZA_UZYTK_MOD_DATA
                         from pbl_zapisy z
                         join IBL_OWNER.pbl_zapisy_autorzy za on za.zaam_za_zapis_id=z.za_zapis_id
                         join IBL_OWNER.pbl_autorzy a on za.zaam_am_autor_id=a.am_autor_id
@@ -132,7 +134,7 @@ pbl_books2 <- dbGetQuery(PBL,
                             to_char(null) \"tworca_imie\", to_char(a.am_autor_id) \"autor_id\", a.am_nazwisko \"autor_nazwisko\", 
                             a.am_imie \"autor_imie\", z.za_tytul \"tytul\", z.za_opis_wspoltworcow \"wspoltworcy\", to_char(null) \"funkcja_osoby\", 
                             to_char(null) \"wspoltworca_id\", to_char(null) \"wspoltworca_nazwisko\", to_char(null) \"wspoltworca_imie\", 
-                            z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id
+                            z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id,z.ZA_UZYTK_WPIS_DATA,z.ZA_UZYTK_MOD_DATA
                           from pbl_zapisy z
                           join IBL_OWNER.pbl_zapisy_autorzy za on za.zaam_za_zapis_id=z.za_zapis_id
                           join IBL_OWNER.pbl_autorzy a on za.zaam_am_autor_id=a.am_autor_id
@@ -147,7 +149,7 @@ pbl_books3 <- dbGetQuery(PBL,
                                     to_char(null) \"tworca_imie\", to_char(null) \"autor_id\", to_char(null) \"autor_nazwisko\", 
                                     to_char(null) \"autor_imie\", z.za_tytul \"tytul\", z.za_opis_wspoltworcow \"wspoltworcy\", fo.fo_nazwa \"funkcja_osoby\", 
                                     to_char(os.os_osoba_id) \"wspoltworca_id\", os.os_nazwisko \"wspoltworca_nazwisko\", os.os_imie \"wspoltworca_imie\", 
-                                    z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id
+                                    z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id,z.ZA_UZYTK_WPIS_DATA,z.ZA_UZYTK_MOD_DATA
                             from pbl_zapisy z
                             join IBL_OWNER.pbl_zapisy_wydawnictwa zw on zw.zawy_za_zapis_id=z.za_zapis_id 
 							join IBL_OWNER.pbl_wydawnictwa w on zw.zawy_wy_wydawnictwo_id=w.wy_wydawnictwo_id
@@ -163,7 +165,7 @@ pbl_books4 <- dbGetQuery(PBL,
                                     to_char(null) \"tworca_imie\", to_char(null) \"autor_id\", to_char(null) \"autor_nazwisko\", 
                                     to_char(null) \"autor_imie\", z.za_tytul \"tytul\", z.za_opis_wspoltworcow \"wspoltworcy\", to_char(null) \"funkcja_osoby\", 
                                     to_char(null) \"wspoltworca_id\", to_char(null) \"wspoltworca_nazwisko\", to_char(null) \"wspoltworca_imie\", 
-                                    z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id                             
+                                    z.za_adnotacje \"adnotacja\", w.wy_nazwa \"wydawnictwo\", w.wy_miasto \"miejscowosc\", z.za_rok_wydania \"rok_wydania\", z.za_opis_fizyczny_ksiazki \"opis_fizyczny\", z.za_uzytk_wpisal, z.za_ro_rok, z.za_tytul_oryginalu, z.za_wydanie, z.za_instytucja, z.za_seria_wydawnicza, z.za_te_teatr_id,z.ZA_UZYTK_WPIS_DATA,z.ZA_UZYTK_MOD_DATA                          
                             from pbl_zapisy z
                             join IBL_OWNER.pbl_zapisy_wydawnictwa zw on zw.zawy_za_zapis_id=z.za_zapis_id 
 							join IBL_OWNER.pbl_wydawnictwa w on zw.zawy_wy_wydawnictwo_id=w.wy_wydawnictwo_id
@@ -212,7 +214,7 @@ indeks_osobowy <- dbGetQuery(PBL,
                               from IBL_OWNER.pbl_osoby_do_indeksu")
 
 pbl_books <- merge(pbl_books,indeks_osobowy,by.x = "rekord_id",by.y = "ODI_ZA_ZAPIS_ID", all.x = TRUE)
-pbl_books <- merge(pbl_books,hasla_przekrojowe,by.x = "rekord_id", by.y = "HZ_ZA_ZAPIS_ID")
+pbl_books <- merge(pbl_books,hasla_przekrojowe,by.x = "rekord_id", by.y = "HZ_ZA_ZAPIS_ID", all.x = TRUE)
 ```
 
 ```{r creating pbl books person authority}
@@ -252,8 +254,8 @@ pbl_people <- rbind(creators,authors,contributors,index_of_people) %>%
 
 ```{r final marc books dataframe}
 #empty data.frame
-pbl_marc <- data.frame(LDR = character(), X001 = character(), X590 = character(), X964 = character(), X100 = character(), X600 = character(), X245 = character(), X700 = character(), X520 = character(), X246 = character(), X300 = character(), X250 = character(), X710 = character(), X490 = character(), X610 = character(), X630 = character(), X787 = character(), X650 = character(), X651 = character(), X655 = character(),  X611 = character(), stringsAsFactors=FALSE)
-pbl_marc <- pbl_marc[,order(colnames(pbl_marc))]
+pbl_marc <- data.frame(LDR = character(), X001 = character(), X590 = character(), X964 = character(), X100 = character(), X600 = character(), X245 = character(), X700 = character(), X520 = character(), X240 = character(), X300 = character(), X250 = character(), X710 = character(), X490 = character(), X610 = character(), X630 = character(), X787 = character(), X650 = character(), X651 = character(), X655 = character(),  X611 = character(), X264 = character(), stringsAsFactors=FALSE) %>%
+  select(noquote(order(colnames(.))))
 
 #LDR
 LDR <- "     nam         4u     "
@@ -261,6 +263,24 @@ LDR <- "     nam         4u     "
 X001 <- pbl_books %>%
   select(X001 = rekord_id) %>%
   unique()
+
+#X005
+X005 <- pbl_books %>%
+  select(rekord_id,ZA_UZYTK_MOD_DATA) %>%
+  unique() %>%
+  rename(X005 = ZA_UZYTK_MOD_DATA) %>%
+  mutate(X005 = str_replace(X005,"(\\d{4})(-)(\\d{2})(-)(\\d{2})(.*$)","\\1\\3\\5"))
+
+#X008
+X008 <- pbl_books %>%
+  select(rekord_id,ZA_UZYTK_WPIS_DATA) %>%
+  unique() %>%
+  rename(X008 = ZA_UZYTK_WPIS_DATA) %>%
+  mutate(X008 = paste(str_replace(X008,"(\\d{2})(\\d{2})(-)(\\d{2})(-)(\\d{2})(.*$)","\\2\\4\\6"),"                              -d",sep = ""))
+
+#X040
+X040 <- "$aIBL$bpol"
+
 #X100
 X100 <- pbl_books %>%
   select(rekord_id,rodzaj_zapisu,tworca_nazwisko,tworca_imie,autor_nazwisko,autor_imie) %>%
@@ -276,26 +296,287 @@ X100 <- pbl_books %>%
   unique() %>%
   mutate(X700 = ifelse(grepl("\\|",X100),str_replace(X100,"^(.*?)(\\|)(.*$)","\\3"),NA),
          X100 = ifelse(grepl("\\|",X100),str_replace(X100,"^(.*?)(\\|)(.*$)","\\1"),as.character(X100)),
-         X100 = ifelse(X100=="NA",NA,as.character(X100)))
+         X100 = ifelse(X100=="NA",NA,as.character(X100)),
+         X700 = ifelse(X700==X100,NA,as.character(X700)))
+#X240
+X240 <- pbl_books %>%
+  select(rekord_id,ZA_TYTUL_ORYGINALU) %>%
+  unique() %>%
+  rename(X240 = ZA_TYTUL_ORYGINALU) %>%
+  mutate(X240 = ifelse(is.na(X240),"",paste("$a",str_replace(X240,"^(.*?\\])(.*$)","\\1"),sep = "")))
+
 #X245
-#10$aMasaż ironią :$bwybór fraszek i aforyzmów /$cZbigniew Kurzyński ; wstępem opatrzył Stanisław Stanik ; [il. Piotr Szałkowski].
 X245 <- pbl_books %>%
   select(rekord_id,autor_nazwisko,autor_imie,tytul,wspoltworcy,ZA_INSTYTUCJA) %>%
   unique() %>%
-  mutate(tytul_ok = str_remove(paste("10$a",ifelse(substr(tytul,nchar(tytul),nchar(tytul))=="]",trim(str_replace(tytul,"(^.*?)(\\[.*?$)","\\1")),
+  mutate(tytul_ok = str_remove(paste("10$a",ifelse(substr(tytul,nchar(tytul),nchar(tytul))=="]",trim(str_replace(tytul,"(^.*?)(([\\.!?] {0,1})\\[.*?$)","\\1")),
                            ifelse(substr(tytul,1,1)=="[",trim(str_replace(tytul,"(^.*?\\])(.*?$)","\\2")),as.character(tytul)))," /",sep = ""),"10\\$a \\/"),
          autor = ifelse(!is.na(autor_nazwisko)&!is.na(autor_imie),paste("$c",autor_imie," ",autor_nazwisko,sep = ""),
                         ifelse(!is.na(autor_nazwisko)&is.na(autor_imie),paste("$c",autor_nazwisko,sep = ""),"")),
          wspoltworcy = ifelse(is.na(wspoltworcy),"",as.character(wspoltworcy)),
          ZA_INSTYTUCJA = ifelse(is.na(ZA_INSTYTUCJA),"",as.character(ZA_INSTYTUCJA))) %>%
   select(rekord_id,tytul_ok,autor,wspoltworcy,ZA_INSTYTUCJA) %>%
+  group_by(rekord_id) %>%
+  mutate(tytul_ok = paste(unique(tytul_ok),collapse = "|"),
+         autor = str_replace_all(paste(unique(autor),collapse = "|"),"\\|\\$c",", "),
+         wspoltworcy = paste(unique(wspoltworcy),collapse = "|"),
+         ZA_INSTYTUCJA = paste(unique(ZA_INSTYTUCJA),collapse = "|")) %>%
+  ungroup() %>%
   mutate(X245 = paste(tytul_ok,autor," ; ",wspoltworcy," ; ",ZA_INSTYTUCJA,".", sep = ""),
          X245 = str_replace(X245,"( ;  ; )(\\.)|( ; )(\\.)","\\2")) %>%
-  select(rekord_id,X245)
+  select(rekord_id,X245) %>%
+  unique()
+
+#X250
+X250 <- pbl_books %>%
+  select(rekord_id,ZA_WYDANIE) %>%
+  unique() %>%
+  rename(X250 = ZA_WYDANIE) %>%
+  mutate(X250 = ifelse(is.na(X250),"",paste("$a",as.character(X250),sep = "")))
+
+#X264
+X264 <- pbl_books %>%
+  select(rekord_id,wydawnictwo,miejscowosc,ZA_RO_ROK) %>%
+  unique() %>%
+  mutate(X264 = paste("1 $a",miejscowosc," : $b",wydawnictwo,sep = "")) %>%
+  select(rekord_id,X264,ZA_RO_ROK) %>%
+  group_by(rekord_id) %>%
+  mutate(X264 = paste(X264,collapse = "; "),
+         ZA_RO_ROK = paste(unique(ZA_RO_ROK),collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  mutate(X264 = paste(X264,",$c",ZA_RO_ROK,sep = "")) %>%
+  select(rekord_id,X264)
+
+#X300
+X300 <- pbl_books %>%
+  select(rekord_id,opis_fizyczny) %>%
+  unique() %>%
+  rename(X300 = opis_fizyczny) %>%
+  mutate(X300 = trim(ifelse(is.na(X300),"",
+                       ifelse(grepl("^\\[\\d{4}\\],|^\\[\\d{4}\\]\\.",X300),str_replace(X300,"^(\\[\\d{4}\\](,|\\.))(.*$)","\\3"),as.character(X300)))),
+         X300 = ifelse(X300=="","",paste("$a",X300,sep = "")))
+
+#X490
+X490 <- pbl_books %>%
+  select(rekord_id,ZA_SERIA_WYDAWNICZA) %>%
+  unique() %>%
+  rename(X490 = ZA_SERIA_WYDAWNICZA) %>%
+  mutate(X490 = str_remove(str_remove(X490,"^\\("),"\\)\\.{0,1}$"),
+         X490 = str_replace(X490,"\\) \\(","#"),
+         X490 = str_replace_all(X490,"(\\d+)(\\. )","\\1\\2#")) %>%
+  cSplit(.,"X490",sep = "#",direction = "long") %>%
+  mutate(X490 = ifelse(grepl("\\d",X490),
+                       ifelse(grepl("; ",X490),str_replace(X490,"; ","|"),str_replace(X490,", ","|")),as.character(X490))) %>%
+  cSplit(.,"X490",sep = "|",direction = "wide") %>%
+  mutate(X490 = ifelse(is.na(X490_2)&!is.na(X490_1),paste("0 $a",X490_1,sep = ""),
+                       ifelse(!is.na(X490_1)&!is.na(X490_2),paste("0 $a",X490_1," ; $v",X490_2,sep = ""),""))) %>%
+  select(rekord_id,X490) %>%
+  group_by(rekord_id) %>%
+  mutate(X490 = paste(X490,collapse = "|")) %>%
+  ungroup() %>%
+  unique()
+
+#X520
+X520 <- pbl_books %>%
+  select(rekord_id,adnotacja) %>%
+  unique() %>%
+  rename(X520 = adnotacja) %>%
+  mutate(X520 = ifelse(is.na(X520),"",paste("2 $a",X520,sep = "")))
+
+#X590
+X590 <- pbl_books %>%
+  select(rekord_id,rodzaj_zapisu) %>%
+  unique() %>%
+  rename(X590 = rodzaj_zapisu)
+
+#X600
+X600 <- pbl_books %>%
+  select(rekord_id,rodzaj_zapisu,tworca_nazwisko,tworca_imie) %>%
+  unique() %>%
+  filter(rodzaj_zapisu=="książka o twórcy (przedmiotowa)") %>%
+  mutate(tworca_nazwisko = ifelse(!is.na(tworca_nazwisko)&grepl(",",tworca_nazwisko)&tworca_imie=="*",str_replace_all(tworca_nazwisko,",","|"),as.character(tworca_nazwisko)),
+         tworca_imie = ifelse(!is.na(tworca_nazwisko)&tworca_imie=="*","",as.character(tworca_imie))) %>%
+  cSplit(.,"tworca_nazwisko",sep = "|",direction = "long") %>%
+  mutate(X600 = ifelse(tworca_imie!="",paste("14$a",tworca_nazwisko,", ",tworca_imie,sep = ""),paste("14$a",tworca_nazwisko,sep = ""))) %>%
+  select(rekord_id,X600) %>%
+  group_by(rekord_id) %>%
+  mutate(X600 = paste(X600,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  mutate(X600 = str_remove(X600," \\*$|\\*$")) %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+  
+#X610
+X610 <- pbl_books %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="24.61"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X610 = paste("24$a",KH_NAZWA,sep = "")) %>%
+  select(rekord_id,X610) %>%
+  group_by(rekord_id) %>%
+  mutate(X610 = paste(X610,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X611
+X611 <- pbl_books %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="24.611"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X611 = paste("24$a",KH_NAZWA,sep = "")) %>%
+  select(rekord_id,X611) %>%
+  group_by(rekord_id) %>%
+  mutate(X611 = paste(X611,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X630
+X630 <- pbl_books %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="4.63"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X630 = paste(" 4$a",KH_NAZWA,sep = "")) %>%
+  select(rekord_id,X630) %>%
+  group_by(rekord_id) %>%
+  mutate(X630 = paste(X630,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X650
+X650 <- pbl_books %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="4.65"|MARC_FIELD=="24.65"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X650 = ifelse(MARC_FIELD=="4.65",paste("04$a",KH_NAZWA,sep = ""),
+                       ifelse(MARC_FIELD=="24.65",paste("24$a",KH_NAZWA,sep = ""),""))) %>%
+  select(rekord_id,X650) %>%
+  group_by(rekord_id) %>%
+  mutate(X650 = paste(X650,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X651
+X651 <- pbl_books %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="4.651"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X651 = paste(" 4$a",KH_NAZWA,sep = "")) %>%
+  select(rekord_id,X651) %>%
+  group_by(rekord_id) %>%
+  mutate(X651 = paste(X651,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X655
+X655 <- pbl_books %>%
+  select(rekord_id,tytul) %>%
+  unique() %>%
+  group_by(rekord_id) %>%
+  mutate(X655 = paste(unlist(str_extract_all(tytul,"(?<!^.)(?<=\\[)(.*?)(?=\\])")),collapse = "|")) %>%
+  ungroup() %>%
+  select(rekord_id,X655) %>%
+  cSplit(.,"X655",sep = "|",direction = "long") %>%
+  mutate(X655 = paste(" 4$a",X655,sep = "")) %>%
+  group_by(rekord_id) %>%
+  mutate(X655 = paste(X655,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X700
+X700 <- pbl_books %>%
+  select(rekord_id,funkcja_osoby,wspoltworca_nazwisko,wspoltworca_imie) %>%
+  unique() %>%
+  mutate(X700 = ifelse(is.na(wspoltworca_nazwisko),"",paste("1 $a",wspoltworca_nazwisko,", ",wspoltworca_imie," ; $e",funkcja_osoby,sep = ""))) %>%
+  select(rekord_id,X700) %>%
+  rbind(X100 %>% select(rekord_id,X700) %>% cSplit(.,"X700",sep = "|",direction = "long"),.) %>%
+  arrange(rekord_id) %>%
+  filter(!is.na(X700)&X700!="") %>%
+  group_by(rekord_id) %>%
+  mutate(X700 = paste(X700,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+X100 <- X100 %>%
+  select(rekord_id,X100)
+  
+#CZY ROBIĆ 710??????????????????????????
+
+#X787
+X787 <- pbl_books %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="787"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  rename(X787 = KH_NAZWA) %>%
+  select(rekord_id,X787) %>%
+  group_by(rekord_id) %>%
+  mutate(X787 = paste(X787,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X964
+X964 <- pbl_books %>%
+  select(rekord_id,dzial) %>%
+  unique() %>%
+  rename(X964 = dzial) %>%
+  mutate(X964 = str_replace(X964,"(.*)( - .$)","\\1"))
+
+pbl_marc_books <- X005 %>%
+  full_join(.,X008,by = "rekord_id") %>%
+  full_join(.,X100,by = "rekord_id") %>%
+  full_join(.,X240,by = "rekord_id") %>%
+  full_join(.,X245,by = "rekord_id") %>%
+  full_join(.,X250,by = "rekord_id") %>%
+  full_join(.,X264,by = "rekord_id") %>%
+  full_join(.,X300,by = "rekord_id") %>%
+  full_join(.,X490,by = "rekord_id") %>%
+  full_join(.,X520,by = "rekord_id") %>%
+  full_join(.,X590,by = "rekord_id") %>%
+  full_join(.,X600,by = "rekord_id") %>%
+  full_join(.,X610,by = "rekord_id") %>%
+  full_join(.,X611,by = "rekord_id") %>%
+  full_join(.,X630,by = "rekord_id") %>%
+  full_join(.,X650,by = "rekord_id") %>%
+  full_join(.,X651,by = "rekord_id") %>%
+  full_join(.,X655,by = "rekord_id") %>%
+  full_join(.,X700,by = "rekord_id") %>%
+  full_join(.,X787,by = "rekord_id") %>%
+  full_join(.,X964,by = "rekord_id") %>%
+  cbind(.,LDR,X040,X001) %>%
+  select(noquote(order(colnames(.))))
+
+colnames(pbl_marc)
 
 
+class(X655$gatunek)
+  
+  mutate(gatunek = paste(,collapse = "|")) %>%
+  ungroup()
 
+  mutate(tytul_ok = ifelse(substr(tytul,nchar(tytul),nchar(tytul))=="]",trim(str_replace(tytul,"(^.*?)(([\\.!?] {0,1})(\\[))(.*?$)","\\5")),""))
+
+
+test <- pbl_hp %>%
+  select(MARC_FIELD) %>%
+  unique()
 #TUTAJ#
+#na koniec zrobić trim(na wszystkich kolumnach)
   
 
 test <- pbl_books %>%

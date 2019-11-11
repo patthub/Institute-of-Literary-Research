@@ -1,0 +1,292 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+  word_document: default
+---
+
+1. Download whole databases in pieces from .txt files and prepare the table.
+
+```{r}
+library(plyr)
+library(stringr)
+library(tidyverse)
+library(reshape2)
+library(zoo)
+library(sqldf)
+library(splitstackshape)
+library(dplyr)
+library(svMisc)
+#download database in pieces
+aleph1 <- readLines("C:/Users/Cezary/Desktop/aleph/chunk0.txt", encoding = "UTF-8")
+aleph2 <- readLines("C:/Users/Cezary/Desktop/aleph/chunk1.txt", encoding = "UTF-8")
+aleph3 <- readLines("C:/Users/Cezary/Desktop/aleph/chunk2.txt", encoding = "UTF-8")
+aleph4 <- readLines("C:/Users/Cezary/Desktop/aleph/chunk3.txt", encoding = "UTF-8")
+aleph5 <- readLines("C:/Users/Cezary/Desktop/aleph/chunk4.txt", encoding = "UTF-8")
+aleph6 <- readLines("C:/Users/Cezary/Desktop/aleph/chunk5.txt", encoding = "UTF-8")
+aleph7 <- readLines("C:/Users/Cezary/Desktop/aleph/chunk6.txt", encoding = "UTF-8")
+aleph8 <- readLines("C:/Users/Cezary/Desktop/aleph/chunk7.txt", encoding = "UTF-8")
+data1$content[1:20]
+#pieces transformation
+#pack - data1
+data1 <- data.frame(aleph1)
+data1 <- mutate(data1,
+                id = as.character(str_extract_all(data1$aleph1, "^\\d{9}")),
+                field = str_replace_all(data1$aleph1, "(\\d{9} )(\\w{3})(.*)", "\\2"),
+                content = str_replace_all(str_replace_all(data1$aleph1,"(\\d{9} )(\\w{3})(\\s{3})(.*)","\\1\\2 \\4"),"(\\d{9} )(\\w{3})(\\d\\s|\\d\\d|\\s\\d){0,2}( L )(.*)","\\3\\5"))
+data1 <- mutate(data1,
+                id_field = paste(data1$id,data1$field,sep = "|"))
+count <- data1 %>%
+  select(5,1)
+count <- as.data.frame(table(count$id_field))
+data1 <- merge(x=data1,y=count, by.x = "id_field", by.y = "Var1")
+data1_to_join <- data1 %>%
+  filter(Freq > 1)
+data1_to_join <- ddply(data1_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data1_to_join <- mutate(data1_to_join,
+                        id = str_replace_all(data1_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data1_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\3"))
+data1_ok <- data1 %>%
+  filter(Freq == 1) %>%
+  select(-2,-6) %>%
+  select(1,4,2,3)
+data1 <- rbind(data1_ok,data1_to_join)
+data1 <- data1[order(as.character(data1$id_field)),]
+data1 <- data.frame(data1)
+#pack - data2
+data2 <- data.frame(aleph2)
+data2 <- mutate(data2,
+                id = as.character(str_extract_all(data2$aleph2, "^\\d{9}")),
+                field = str_replace_all(data2$aleph2, "(\\d{9} )(\\w{3})(.*)", "\\2"),
+                content = str_replace_all(str_replace_all(data2$aleph2,"(\\d{9} )(\\w{3})(\\s{3})(.*)","\\1\\2 \\4"),"(\\d{9} )(\\w{3})(\\d\\s|\\d\\d|\\s\\d){0,2}( L )(.*)","\\3\\5"))
+data2 <- mutate(data2,
+                id_field = paste(data2$id,data2$field,sep = "|"))
+count <- data2 %>%
+  select(5,1)
+count <- as.data.frame(table(count$id_field))
+data2 <- merge(x=data2,y=count, by.x = "id_field", by.y = "Var1")
+data2_to_join <- data2 %>%
+  filter(Freq > 1)
+data2_to_join <- ddply(data2_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data2_to_join <- mutate(data2_to_join,
+                        id = str_replace_all(data2_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data2_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\3"))
+data2_ok <- data2 %>%
+  filter(Freq == 1) %>%
+  select(-2,-6) %>%
+  select(1,4,2,3)
+data2 <- rbind(data2_ok,data2_to_join)
+data2 <- data2[order(as.character(data2$id_field)),]
+data2 <- data.frame(data2)
+#pack - data3
+data3 <- data.frame(aleph3)
+data3 <- mutate(data3,
+                id = as.character(str_extract_all(data3$aleph3, "^\\d{9}")),
+                field = str_replace_all(data3$aleph3, "(\\d{9} )(\\w{3})(.*)", "\\2"),
+                content = str_replace_all(str_replace_all(data3$aleph3,"(\\d{9} )(\\w{3})(\\s{3})(.*)","\\1\\2 \\4"),"(\\d{9} )(\\w{3})(\\d\\s|\\d\\d|\\s\\d){0,2}( L )(.*)","\\3\\5"))
+data3 <- mutate(data3,
+                id_field = paste(data3$id,data3$field,sep = "|"))
+count <- data3 %>%
+  select(5,1)
+count <- as.data.frame(table(count$id_field))
+data3 <- merge(x=data3,y=count, by.x = "id_field", by.y = "Var1")
+data3_to_join <- data3 %>%
+  filter(Freq > 1)
+data3_to_join <- ddply(data3_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data3_to_join <- mutate(data3_to_join,
+                        id = str_replace_all(data3_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data3_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\3"))
+data3_ok <- data3 %>%
+  filter(Freq == 1) %>%
+  select(-2,-6) %>%
+  select(1,4,2,3)
+data3 <- rbind(data3_ok,data3_to_join)
+data3 <- data3[order(as.character(data3$id_field)),]
+data3 <- data.frame(data3)
+#pack - data4
+data4 <- data.frame(aleph4)
+data4 <- mutate(data4,
+                id = as.character(str_extract_all(data4$aleph4, "^\\d{9}")),
+                field = str_replace_all(data4$aleph4, "(\\d{9} )(\\w{3})(.*)", "\\2"),
+                content = str_replace_all(str_replace_all(data4$aleph4,"(\\d{9} )(\\w{3})(\\s{3})(.*)","\\1\\2 \\4"),"(\\d{9} )(\\w{3})(\\d\\s|\\d\\d|\\s\\d){0,2}( L )(.*)","\\3\\5"))
+data4 <- mutate(data4,
+                id_field = paste(data4$id,data4$field,sep = "|"))
+count <- data4 %>%
+  select(5,1)
+count <- as.data.frame(table(count$id_field))
+data4 <- merge(x=data4,y=count, by.x = "id_field", by.y = "Var1")
+data4_to_join <- data4 %>%
+  filter(Freq > 1)
+data4_to_join <- ddply(data4_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data4_to_join <- mutate(data4_to_join,
+                        id = str_replace_all(data4_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data4_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\3"))
+data4_ok <- data4 %>%
+  filter(Freq == 1) %>%
+  select(-2,-6) %>%
+  select(1,4,2,3)
+data4 <- rbind(data4_ok,data4_to_join)
+data4 <- data4[order(as.character(data4$id_field)),]
+data4 <- data.frame(data4)
+#pack - data5
+data5 <- data.frame(aleph5)
+data5 <- mutate(data5,
+                id = as.character(str_extract_all(data5$aleph5, "^\\d{9}")),
+                field = str_replace_all(data5$aleph5, "(\\d{9} )(\\w{3})(.*)", "\\2"),
+                content = str_replace_all(str_replace_all(data5$aleph5,"(\\d{9} )(\\w{3})(\\s{3})(.*)","\\1\\2 \\4"),"(\\d{9} )(\\w{3})(\\d\\s|\\d\\d|\\s\\d){0,2}( L )(.*)","\\3\\5"))
+data5 <- mutate(data5,
+                id_field = paste(data5$id,data5$field,sep = "|"))
+count <- data5 %>%
+  select(5,1)
+count <- as.data.frame(table(count$id_field))
+data5 <- merge(x=data5,y=count, by.x = "id_field", by.y = "Var1")
+data5_to_join <- data5 %>%
+  filter(Freq > 1)
+data5_to_join <- ddply(data5_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data5_to_join <- mutate(data5_to_join,
+                        id = str_replace_all(data5_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data5_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\3"))
+data5_ok <- data5 %>%
+  filter(Freq == 1) %>%
+  select(-2,-6) %>%
+  select(1,4,2,3)
+data5 <- rbind(data5_ok,data5_to_join)
+data5 <- data5[order(as.character(data5$id_field)),]
+data5 <- data.frame(data5)
+#pack - data6
+data6 <- data.frame(aleph6)
+data6 <- mutate(data6,
+                id = as.character(str_extract_all(data6$aleph6, "^\\d{9}")),
+                field = str_replace_all(data6$aleph6, "(\\d{9} )(\\w{3})(.*)", "\\2"),
+                content = str_replace_all(str_replace_all(data6$aleph6,"(\\d{9} )(\\w{3})(\\s{3})(.*)","\\1\\2 \\4"),"(\\d{9} )(\\w{3})(\\d\\s|\\d\\d|\\s\\d){0,2}( L )(.*)","\\3\\5"))
+data6 <- mutate(data6,
+                id_field = paste(data6$id,data6$field,sep = "|"))
+count <- data6 %>%
+  select(5,1)
+count <- as.data.frame(table(count$id_field))
+data6 <- merge(x=data6,y=count, by.x = "id_field", by.y = "Var1")
+data6_to_join <- data6 %>%
+  filter(Freq > 1)
+data6_to_join <- ddply(data6_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data6_to_join <- mutate(data6_to_join,
+                        id = str_replace_all(data6_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data6_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\3"))
+data6_ok <- data6 %>%
+  filter(Freq == 1) %>%
+  select(-2,-6) %>%
+  select(1,4,2,3)
+data6 <- rbind(data6_ok,data6_to_join)
+data6 <- data6[order(as.character(data6$id_field)),]
+data6 <- data.frame(data6)
+#pack - data7
+data7 <- data.frame(aleph7)
+data7 <- mutate(data7,
+                id = as.character(str_extract_all(data7$aleph7, "^\\d{9}")),
+                field = str_replace_all(data7$aleph7, "(\\d{9} )(\\w{3})(.*)", "\\2"),
+                content = str_replace_all(str_replace_all(data7$aleph7,"(\\d{9} )(\\w{3})(\\s{3})(.*)","\\1\\2 \\4"),"(\\d{9} )(\\w{3})(\\d\\s|\\d\\d|\\s\\d){0,2}( L )(.*)","\\3\\5"))
+data7 <- mutate(data7,
+                id_field = paste(data7$id,data7$field,sep = "|"))
+count <- data7 %>%
+  select(5,1)
+count <- as.data.frame(table(count$id_field))
+data7 <- merge(x=data7,y=count, by.x = "id_field", by.y = "Var1")
+data7_to_join <- data7 %>%
+  filter(Freq > 1)
+data7_to_join <- ddply(data7_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data7_to_join <- mutate(data7_to_join,
+                        id = str_replace_all(data7_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data7_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\3"))
+data7_ok <- data7 %>%
+  filter(Freq == 1) %>%
+  select(-2,-6) %>%
+  select(1,4,2,3)
+data7 <- rbind(data7_ok,data7_to_join)
+data7 <- data7[order(as.character(data7$id_field)),]
+data7 <- data.frame(data7)
+#pack - data8
+data8 <- data.frame(aleph8)
+data8 <- mutate(data8,
+                id = as.character(str_extract_all(data8$aleph8, "^\\d{9}")),
+                field = str_replace_all(data8$aleph8, "(\\d{9} )(\\w{3})(.*)", "\\2"),
+                content = str_replace_all(str_replace_all(data8$aleph8,"(\\d{9} )(\\w{3})(\\s{3})(.*)","\\1\\2 \\4"),"(\\d{9} )(\\w{3})(\\d\\s|\\d\\d|\\s\\d){0,2}( L )(.*)","\\3\\5"))
+data8 <- mutate(data8,
+                id_field = paste(data8$id,data8$field,sep = "|"))
+count <- data8 %>%
+  select(5,1)
+count <- as.data.frame(table(count$id_field))
+data8 <- merge(x=data8,y=count, by.x = "id_field", by.y = "Var1")
+data8_to_join <- data8 %>%
+  filter(Freq > 1)
+data8_to_join <- ddply(data8_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
+data8_to_join <- mutate(data8_to_join,
+                        id = str_replace_all(data8_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\1"),
+                        field = str_replace_all(data8_to_join$id_field,"(\\d{9})(\\|)(.*)", "\\3"))
+data8_ok <- data8 %>%
+  filter(Freq == 1) %>%
+  select(-2,-6) %>%
+  select(1,4,2,3)
+data8 <- rbind(data8_ok,data8_to_join)
+data8 <- data8[order(as.character(data8$id_field)),]
+data8 <- data.frame(data8)
+#pieces binding
+data_full_vm <- rbind(data1,data2,data3,data4,data5,data6,data7,data8)
+data_full_vm <- data_full_vm %>%
+  select(-1)
+data1 <- dcast(data1, id ~ field, value.var="content")
+#saving the table
+write.csv2(data_full_vm, file = "C:/Users/Cezary/Desktop/cz_database_marc_vm.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+```
+
+2. Preparing table for excact marc filed and dividing it per subfields
+
+```{r}
+#deleni poli na podpole
+#field 600 <- number of field
+#remember to change the name of the column from X600 to e.g. X787
+data1 <- data1 %>%
+  rename(X600 = `600`)
+marc_field <- data1 %>%
+  select(id,SIF,X600)%>%
+  filter(X600!="")
+marc_field$X600<-str_replace_all(marc_field$X600,"(^|\\|)","~\\1")
+marc_field<- cSplit(marc_field,"X600",sep = "~",direction = "long")
+marc_field<- marc_field%>%
+  filter(X600!="")
+marc_field$X600<-str_remove_all(marc_field$X600,"^\\|")
+marc_field <- mutate(marc_field,
+               indicator = str_replace_all(marc_field$X600,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(data1$X600,"\\${2}.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+
+marc_field<-cbind(marc_field,empty_table)
+
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+
+for (i in x) {
+  marc_field$X600 <- str_replace(marc_field$X600,subfield_list_char[i],"|\\1")
+  progress(match(i,x), max.value = length(x)) 
+}
+for (i in x) {
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+string_a <- "(^)(.*?\\|"
+string_b <- subfield_list_char2[i]
+string_c <- ")(.*?)(\\,{0,1})((\\|\\${2})(.*)|$)"
+string <- paste(string_a,string_b,string_c,sep = "")
+marc_field[,i+4] <- ifelse(grepl(subfield_list_char2[i],marc_field$X600),str_replace_all(gsub(string,"\\3",marc_field$X600),"\\${2}.", "~"),NA)
+progress(match(i,x), max.value = length(x))  
+}
+
+marc_field <- marc_field[!is.na(names(marc_field))]
+test <- marc_field %>%
+  filter(`$$x`=="OPRAVA UCL")
+count <- as.data.frame(table(test$`$$a`))
+
+```
+
