@@ -585,7 +585,8 @@ long <- reshape(pbl_marc_books,
   mutate(fields = ifelse(lead(fields=="=LDR"),paste(fields,"||",sep = ""),as.character(fields))) %>%
   mutate(Value = ifelse(lead(fields=="=LDR"),paste(Value,"||",sep = ""),as.character(Value))) %>%
   cSplit(.,c("fields","Value"),sep = "|",direction = "long") %>%
-  write.table(., "pbl_marc.csv", append = FALSE, sep = " ", dec = ",", row.names = FALSE, col.names = FALSE)
+  write.table(., "pbl_marc.csv", append = FALSE, sep = " ", dec = ",", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
 ```
 
 ```{r pbl articles}
