@@ -262,7 +262,8 @@ LDR <- "     nam         4u     "
 #X001
 X001 <- pbl_books %>%
   select(X001 = rekord_id) %>%
-  unique()
+  unique() %>%
+  mutate(X001 = paste("pl",sprintf("%08d", X001),sep = ""))
 
 #X005
 X005 <- pbl_books %>%
@@ -273,10 +274,11 @@ X005 <- pbl_books %>%
 
 #X008
 X008 <- pbl_books %>%
-  select(rekord_id,ZA_UZYTK_WPIS_DATA) %>%
+  select(rekord_id,ZA_UZYTK_WPIS_DATA,ZA_RO_ROK) %>%
   unique() %>%
   rename(X008 = ZA_UZYTK_WPIS_DATA) %>%
-  mutate(X008 = paste(str_replace(X008,"(\\d{2})(\\d{2})(-)(\\d{2})(-)(\\d{2})(.*$)","\\2\\4\\6"),"                              -d",sep = ""))
+  mutate(X008 = paste(str_replace(X008,"(\\d{2})(\\d{2})(-)(\\d{2})(-)(\\d{2})(.*$)","\\2\\4\\6"),"s",as.character(ZA_RO_ROK),"----                    -d",sep = "")) %>%
+  select(rekord_id,X008)
 
 #X040
 X040 <- "$aIBL$bpol"
@@ -287,8 +289,8 @@ X100 <- pbl_books %>%
   unique() %>%
   mutate(tworca_nazwisko = ifelse(rodzaj_zapisu=="książka twórcy (podmiotowa)"&!is.na(tworca_nazwisko)&grepl(",",tworca_nazwisko)&tworca_imie=="*",as.character(autor_nazwisko),as.character(tworca_nazwisko)),
          tworca_imie = ifelse(rodzaj_zapisu=="książka twórcy (podmiotowa)"&!is.na(tworca_nazwisko)&tworca_nazwisko==autor_nazwisko&tworca_imie=="*",as.character(autor_imie),as.character(tworca_imie)),
-         X100 = ifelse(rodzaj_zapisu=="książka twórcy (podmiotowa)",paste("1 $a",tworca_nazwisko,", ",tworca_imie," ; $4aut",sep = ""),
-                       ifelse(!is.na(autor_nazwisko),paste("1 $a",autor_nazwisko,", ",autor_imie," ; $4aut",sep = ""),NA))) %>%
+         X100 = ifelse(rodzaj_zapisu=="książka twórcy (podmiotowa)",paste("1\\$a",tworca_nazwisko,", ",tworca_imie,"$4aut",sep = ""),
+                       ifelse(!is.na(autor_nazwisko),paste("1 $a",autor_nazwisko,", ",autor_imie,"$4aut",sep = ""),NA))) %>%
   select(rekord_id,X100) %>%
   group_by(rekord_id) %>%
   mutate(X100 = paste(X100,collapse = "|")) %>%
@@ -303,7 +305,7 @@ X240 <- pbl_books %>%
   select(rekord_id,ZA_TYTUL_ORYGINALU) %>%
   unique() %>%
   rename(X240 = ZA_TYTUL_ORYGINALU) %>%
-  mutate(X240 = ifelse(is.na(X240),"",paste("$a",str_replace(X240,"^(.*?\\])(.*$)","\\1"),sep = "")))
+  mutate(X240 = ifelse(is.na(X240),"",paste("\\\\$a",str_replace(X240,"^(.*?\\])(.*$)","\\1"),sep = "")))
 
 #X245
 X245 <- pbl_books %>%
@@ -332,13 +334,13 @@ X250 <- pbl_books %>%
   select(rekord_id,ZA_WYDANIE) %>%
   unique() %>%
   rename(X250 = ZA_WYDANIE) %>%
-  mutate(X250 = ifelse(is.na(X250),"",paste("$a",as.character(X250),sep = "")))
+  mutate(X250 = ifelse(is.na(X250),"",paste("\\\\$a",as.character(X250),sep = "")))
 
 #X264
 X264 <- pbl_books %>%
   select(rekord_id,wydawnictwo,miejscowosc,ZA_RO_ROK) %>%
   unique() %>%
-  mutate(X264 = paste("1 $a",miejscowosc," : $b",wydawnictwo,sep = "")) %>%
+  mutate(X264 = paste("1\\$a",miejscowosc," : $b",wydawnictwo,sep = "")) %>%
   select(rekord_id,X264,ZA_RO_ROK) %>%
   group_by(rekord_id) %>%
   mutate(X264 = paste(X264,collapse = "; "),
@@ -355,7 +357,7 @@ X300 <- pbl_books %>%
   rename(X300 = opis_fizyczny) %>%
   mutate(X300 = trim(ifelse(is.na(X300),"",
                        ifelse(grepl("^\\[\\d{4}\\],|^\\[\\d{4}\\]\\.",X300),str_replace(X300,"^(\\[\\d{4}\\](,|\\.))(.*$)","\\3"),as.character(X300)))),
-         X300 = ifelse(X300=="","",paste("$a",X300,sep = "")))
+         X300 = ifelse(X300=="","",paste("\\\\$a",X300,sep = "")))
 
 #X490
 X490 <- pbl_books %>%
@@ -369,8 +371,8 @@ X490 <- pbl_books %>%
   mutate(X490 = ifelse(grepl("\\d",X490),
                        ifelse(grepl("; ",X490),str_replace(X490,"; ","|"),str_replace(X490,", ","|")),as.character(X490))) %>%
   cSplit(.,"X490",sep = "|",direction = "wide") %>%
-  mutate(X490 = ifelse(is.na(X490_2)&!is.na(X490_1),paste("0 $a",X490_1,sep = ""),
-                       ifelse(!is.na(X490_1)&!is.na(X490_2),paste("0 $a",X490_1," ; $v",X490_2,sep = ""),""))) %>%
+  mutate(X490 = ifelse(is.na(X490_2)&!is.na(X490_1),paste("0\\$a",X490_1,sep = ""),
+                       ifelse(!is.na(X490_1)&!is.na(X490_2),paste("0\\$a",X490_1," ; $v",X490_2,sep = ""),""))) %>%
   select(rekord_id,X490) %>%
   group_by(rekord_id) %>%
   mutate(X490 = paste(X490,collapse = "|")) %>%
@@ -382,7 +384,7 @@ X520 <- pbl_books %>%
   select(rekord_id,adnotacja) %>%
   unique() %>%
   rename(X520 = adnotacja) %>%
-  mutate(X520 = ifelse(is.na(X520),"",paste("2 $a",X520,sep = "")))
+  mutate(X520 = ifelse(is.na(X520),"",paste("2\\$a",X520,sep = "")))
 
 #X590
 X590 <- pbl_books %>%
@@ -441,7 +443,7 @@ X630 <- pbl_books %>%
   select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
   unique() %>% 
   inner_join(.,pbl_hp %>% filter(MARC_FIELD=="4.63"),by = c("HP_NAZWA","KH_NAZWA")) %>%
-  mutate(X630 = paste(" 4$a",KH_NAZWA,sep = "")) %>%
+  mutate(X630 = paste("\\4$a",KH_NAZWA,sep = "")) %>%
   select(rekord_id,X630) %>%
   group_by(rekord_id) %>%
   mutate(X630 = paste(X630,collapse = "|")) %>%
@@ -470,7 +472,7 @@ X651 <- pbl_books %>%
   select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
   unique() %>% 
   inner_join(.,pbl_hp %>% filter(MARC_FIELD=="4.651"),by = c("HP_NAZWA","KH_NAZWA")) %>%
-  mutate(X651 = paste(" 4$a",KH_NAZWA,sep = "")) %>%
+  mutate(X651 = paste("\\4$a",KH_NAZWA,sep = "")) %>%
   select(rekord_id,X651) %>%
   group_by(rekord_id) %>%
   mutate(X651 = paste(X651,collapse = "|")) %>%
@@ -488,7 +490,7 @@ X655 <- pbl_books %>%
   ungroup() %>%
   select(rekord_id,X655) %>%
   cSplit(.,"X655",sep = "|",direction = "long") %>%
-  mutate(X655 = paste(" 4$a",X655,sep = "")) %>%
+  mutate(X655 = paste("\\4$a",X655,sep = "")) %>%
   group_by(rekord_id) %>%
   mutate(X655 = paste(X655,collapse = "|")) %>%
   ungroup() %>%
@@ -500,7 +502,7 @@ X655 <- pbl_books %>%
 X700 <- pbl_books %>%
   select(rekord_id,funkcja_osoby,wspoltworca_nazwisko,wspoltworca_imie) %>%
   unique() %>%
-  mutate(X700 = ifelse(is.na(wspoltworca_nazwisko),"",paste("1 $a",wspoltworca_nazwisko,", ",wspoltworca_imie," ; $e",funkcja_osoby,sep = ""))) %>%
+  mutate(X700 = ifelse(is.na(wspoltworca_nazwisko),"",paste("1\\$a",wspoltworca_nazwisko,", ",wspoltworca_imie,"$e",funkcja_osoby,sep = ""))) %>%
   select(rekord_id,X700) %>%
   rbind(X100 %>% select(rekord_id,X700) %>% cSplit(.,"X700",sep = "|",direction = "long"),.) %>%
   arrange(rekord_id) %>%
@@ -514,7 +516,12 @@ X700 <- pbl_books %>%
 X100 <- X100 %>%
   select(rekord_id,X100)
   
-#CZY ROBIĆ 710??????????????????????????
+#710
+X710 <- pbl_books %>%
+  select(rekord_id,ZA_INSTYTUCJA) %>%
+  unique() %>%
+  rename(X710 = ZA_INSTYTUCJA) %>%
+  mutate(X710 = ifelse(is.na(X710),NA,paste("24$a",X710,"$4isp",sep = "")))
 
 #X787
 X787 <- pbl_books %>%
@@ -556,50 +563,29 @@ pbl_marc_books <- X005 %>%
   full_join(.,X651,by = "rekord_id") %>%
   full_join(.,X655,by = "rekord_id") %>%
   full_join(.,X700,by = "rekord_id") %>%
+  full_join(.,X710,by = "rekord_id") %>%
   full_join(.,X787,by = "rekord_id") %>%
   full_join(.,X964,by = "rekord_id") %>%
   cbind(.,LDR,X040,X001) %>%
   select(noquote(order(colnames(.))))
 
-colnames(pbl_marc)
-
-
-class(X655$gatunek)
-  
-  mutate(gatunek = paste(,collapse = "|")) %>%
-  ungroup()
-
-  mutate(tytul_ok = ifelse(substr(tytul,nchar(tytul),nchar(tytul))=="]",trim(str_replace(tytul,"(^.*?)(([\\.!?] {0,1})(\\[))(.*?$)","\\5")),""))
-
-
-test <- pbl_hp %>%
-  select(MARC_FIELD) %>%
-  unique()
-#TUTAJ#
-#na koniec zrobić trim(na wszystkich kolumnach)
-  
-
-test <- pbl_books %>%
-  select(tytul) %>%
-  unique()
-#X246
-#X250
-#X300
-#X490
-#X520
-#X590
-#X600
-#X610
-#X611
-#X630
-#X650
-#X651
-#X655
-#X700
-#X710
-#X787
-#X964
-
+long <- reshape(pbl_marc_books,
+                direction = "long",
+                varying = list(names(pbl_marc_books)[-2]),
+                v.names = "Value",
+                idvar = "rekord_id",
+                timevar = "fields",
+                times = names(pbl_marc_books)[-2]) %>%
+  arrange(rekord_id) %>%
+  mutate(Value = ifelse(is.na(Value)&fields=="X001",as.character(rekord_id),
+                        ifelse(is.na(Value),"",as.character(Value))),
+         fields = str_replace(fields,"^X{0,1}","=")) %>%
+  cSplit(.,"Value",sep = "|",direction = "long") %>%
+  select(fields,Value) %>%
+  mutate(fields = ifelse(lead(fields=="=LDR"),paste(fields,"||",sep = ""),as.character(fields))) %>%
+  mutate(Value = ifelse(lead(fields=="=LDR"),paste(Value,"||",sep = ""),as.character(Value))) %>%
+  cSplit(.,c("fields","Value"),sep = "|",direction = "long") %>%
+  write.table(., "pbl_marc.csv", append = FALSE, sep = " ", dec = ",", row.names = FALSE, col.names = FALSE)
 ```
 
 ```{r pbl articles}
@@ -798,4 +784,5 @@ test <- pbl_articles %>%
   unique()
 
 ```
+
 

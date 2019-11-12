@@ -93,4 +93,17 @@ mat <- t(sapply(word.list, "[", i = seq.max))
 ####################
 test <- data.frame(nlp_json[1])
 ```
+```{r excercise}
+
+write.csv2(data1, file = "C:/Users/Cezary/Desktop/exercise.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+#1. Download csv file to RStudio
+#2. Select only these columns from the dataset: id, 008, 100, 245
+#3. Extract in new variable a year of publication from the column 008.
+#4. Filter the dataset for 2009 only.
+#5. Save the data frame as a csv file on your local disk.
+
+persons <- read.csv2("C:/Users/Cezary/Desktop/names.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
+
+```
+
 
