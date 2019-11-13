@@ -20,7 +20,7 @@ library(binman)
 table_data <- data.frame(data_person = character(), role = character(), data_person2 = character(), description = character(), stringsAsFactors=FALSE)
 #browser
 #list_versions("chromedriver")
-rD <- rsDriver(port=4444L,browser="chrome", chromever="77.0.3865.10")
+rD <- rsDriver(port=4444L,browser="chrome", chromever="78.0.3904.11")
 remDr <- rD$client
 url <- "http://ceny.ucl.cas.cz/index.php"
 #rD$server$stop()
@@ -63,7 +63,7 @@ for (i in x) {
   
   table_data <- rbind(table_data,iteration)
 }
-write.csv2(table_data, "C:/Users/Cezary/Desktop/czech_literary_prizes_1.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(table_data, "C:/Users/Cezary/Desktop/czech_literary_prizes_webscraping_file.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 table_data <- read.csv2("C:/Users/Cezary/Desktop/czech_literary_prizes_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 table_data <- table_data %>%
   filter(role == "ocenění:") %>%
