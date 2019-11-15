@@ -432,7 +432,7 @@ for (i in x) {
   iteration <- data.frame(id = pbl_bn_viaf$id[i], name = name, viaf = viaf)
   pbl_viaf <- rbind(pbl_viaf,iteration)
 }
-write.csv2(pbl_viaf, file = "C:/Users/User/Desktop/pbl_bn_viaf", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(pbl_viaf, file = "C:/Users/Cezary/Desktop/pbl_bn_viaf.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 ```
 
