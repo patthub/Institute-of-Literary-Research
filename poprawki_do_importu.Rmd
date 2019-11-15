@@ -13,7 +13,7 @@ pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqld
 jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/R/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 
-import_start <- read.csv2("C:/Users/cezar/Desktop/import_start.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+import_start <- read.csv2("C:/Users/Cezary/Desktop/import_start.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 
 import_start <- import_start %>%
   mutate(temp_id = paste(rekord_BN,za_ro_rok,sep = "|")) %>%
@@ -282,7 +282,7 @@ test <- dataPdf %>%
 
 
 
-
+``` {r }
 
 lista_ksiazek <- lista_ksiazek %>%
   select(pracownik,ZA_ZAPIS_ID,X650,X655)
@@ -626,3 +626,50 @@ test <- test %>%
 colnames(test) <- c("ile_oryg", "ile_cudzys", "ile_dat", "Freq")
 
 ```
+
+```{r statystyki}
+#ile decyzji na miesciąc na bibliografa?
+statystyki <- dbGetQuery(PBL,
+                         "select trim(substr(substr(z.za_uwagi,20,length(z.za_uwagi)),INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1,INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),'_')-(INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1))) \"pracownik\",
+count (*)/5 \"decyzje\"
+from pbl_zapisy z
+where z.za_uwagi like '%import%05%'
+and z.za_uzytk_mod_data between '19/06/13' and '19/11/13'
+and z.za_status_imp in('IOK','INO','IPC','IPN')
+group by trim(substr(substr(z.za_uwagi,20,length(z.za_uwagi)),INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1,INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),'_')-(INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1)))
+order by \"pracownik\"") %>%
+  filter(!is.na(pracownik)) %>%
+  mutate(pracownik = str_remove(pracownik,"x$")) %>%
+  group_by(pracownik) %>%
+  mutate(decyzje = as.integer(sum(decyzje))) %>%
+  ungroup() %>%
+  unique() %>%
+  arrange(-decyzje)
+#ile decyzji w ogóle?
+statystyki <- dbGetQuery(PBL,
+                         "select trim(substr(substr(z.za_uwagi,20,length(z.za_uwagi)),INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1,INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),'_')-(INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1))) \"pracownik\",
+count (*) \"decyzje\"
+from pbl_zapisy z
+where z.za_uwagi like '%import%05%'
+and z.za_status_imp in('IOK','INO','IPC','IPN')
+group by trim(substr(substr(z.za_uwagi,20,length(z.za_uwagi)),INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1,INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),'_')-(INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1)))
+order by \"pracownik\"") %>%
+  filter(!is.na(pracownik)) %>%
+  mutate(pracownik = str_remove(pracownik,"x$")) %>%
+  group_by(pracownik) %>%
+  mutate(decyzje = as.integer(sum(decyzje))) %>%
+  ungroup() %>%
+  unique() %>%
+  arrange(-decyzje)
+
+#ile jest literackich ukd i podmiotowej na rocznik BN?
+bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) %>%
+  mutate(ukd = grepl("\\$a8", X080)|grepl("\\$a7\\.01", X080)|grepl("\\$a7\\.03", X080)|grepl("\\$a7\\.03\\(438\\)\\(091\\)", X080)|grepl("\\$a7\\.07", X080)|grepl("\\$a7\\.096", X080)|grepl("\\$a7\\.097", X080)|grepl("\\$a79", X080)|grepl("\\$a791", X080)|grepl("\\$a791\\.4", X080)|grepl("\\$a792", X080)|grepl("\\$a792\\.071", X080)|grepl("\\$a792\\.09", X080),
+         podmiotowa = grepl("\\$y\\d+ w.",X655))
+test <- bn_ks %>%
+  filter(podmiotowa==TRUE) %>%
+  select(X655)
+
+count <- as.data.frame(table(bn_ks$ukd,bn_ks$podmiotowa))
+```
+

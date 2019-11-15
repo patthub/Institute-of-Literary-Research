@@ -6,7 +6,7 @@ output: html_notebook
 ```{r libraries and conections}
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx)
+pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,magrittr,jsonlite)
 
 #połączenie z bazą PBL
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
@@ -413,38 +413,26 @@ pbl_books <- merge(pbl_books,indeks_osobowy,by.x = "rekord_id",by.y = "ODI_ZA_ZA
 pbl_books <- merge(pbl_books,hasla_przekrojowe,by.x = "rekord_id", by.y = "HZ_ZA_ZAPIS_ID", all.x = TRUE)
 ```
 
-```{r creating pbl books person authority}
-creators <- pbl_books %>%
-  select(id = tworca_id,nazwisko = tworca_nazwisko,imie = tworca_imie) %>%
-  unique() %>%
-  mutate(source = "tworcy")
-authors <- pbl_books %>%
-  select(id = autor_id,nazwisko = autor_nazwisko,imie = autor_imie) %>%
-  unique() %>%
-  mutate(source = "autorzy")
-contributors <- pbl_books %>%
-  select(id = wspoltworca_id,nazwisko = wspoltworca_nazwisko,imie = wspoltworca_imie) %>%
-  unique() %>%
-  mutate(source = "współtwórcy")
-index_of_people <- pbl_books %>%
-  select(nazwisko = ODI_NAZWISKO,imie = ODI_IMIE) %>%
-  unique() %>%
-  mutate(id = seq.int(nrow(.))) %>%
-  select(id,1:3) %>%
-  mutate(source = "indeks osób")
-pbl_people <- rbind(creators,authors,contributors,index_of_people) %>%
-  filter(!is.na(id)) %>%
-  mutate(name = paste(nazwisko,imie,sep = ", "), 
-         name_simple = str_replace_all(str_to_lower(name), "\\W", "")) %>%
-  select(id,name,name_simple,source) %>%
-  group_by(name_simple) %>%
-  mutate(id = paste(id,collapse = "|"),
-         name = paste(unique(name), collapse = "|"),
-         source = paste(source,collapse = "|")) %>%
-  ungroup() %>%
-  select(id,source,name,name_simple) %>%
-  unique() %>%
-  mutate(group_id = seq.int(nrow(.)))
+```{r creating pbl person authority file}
+pbl_bn_viaf <- gs_read(gs_title("mapowanie_osob_bn_pbl"), ws = "pbl_bn") %>%
+  select(id) %>%
+  unique()
+
+pbl_viaf <- data.frame(stringsAsFactors=FALSE)
+x <- 1:length(pbl_bn_viaf$id)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  tryCatch({
+  name <- paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),sep = "|")
+  viaf <- str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields),collapse = "|"),"(\\|NA)|(\\|viaf)")
+  }, error=function(e){
+                     name <<- "brak danych (CR)"
+                     viaf <<- "brak danych (CR)"
+  })
+  iteration <- data.frame(id = pbl_bn_viaf$id[i], name = name, viaf = viaf)
+  pbl_viaf <- rbind(pbl_viaf,iteration)
+}
+write.csv2(pbl_viaf, file = "C:/Users/User/Desktop/pbl_bn_viaf", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 ```
 

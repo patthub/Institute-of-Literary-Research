@@ -11,7 +11,8 @@ options(scipen = 999)
 pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,RJSONIO)
 
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
-jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 
 #wczytywanie kartotek PBL
@@ -37,6 +38,7 @@ colnames(PBL_dzialy_path) <- c("NAD_NAD_NAD_NAD_DZ_DZIAL_ID", "NAD_NAD_NAD_DZ_DZ
 
 PBL_dzialy_path <- merge(x = PBL_dzialy_path, y = PBL_dzialy, by.x = "NAD_NAD_NAD_NAD_NAD_DZ_DZIAL_ID", by.y = "DZ_DZIAL_ID", all.x = TRUE)
 colnames(PBL_dzialy_path) <- c("NAD_NAD_NAD_NAD_NAD_DZ_DZIAL_ID", "NAD_NAD_NAD_NAD_DZ_DZIAL_ID", "NAD_NAD_NAD_DZ_DZIAL_ID", "NAD_NAD_DZ_DZIAL_ID", "NAD_DZ_DZIAL_ID", "DZ_DZIAL_ID", "DZ_NAZWA", "NAD_DZ_NAZWA", "NAD_NAD_DZ_NAZWA", "NAD_NAD_NAD_DZ_NAZWA", "NAD_NAD_NAD_NAD_DZ_NAZWA", "NAD_NAD_NAD_NAD_NAD_DZ_NAZWA", "NAD_NAD_NAD_NAD_NAD_NAD_DZ_DZIAL_ID")
+
 lit_obce <- PBL_dzialy_path %>%
   filter(NAD_NAD_NAD_NAD_DZ_DZIAL_ID==30|NAD_NAD_NAD_DZ_DZIAL_ID==30|NAD_NAD_DZ_DZIAL_ID==30|NAD_DZ_DZIAL_ID==30) %>%
   select(DZ_DZIAL_ID,DZ_NAZWA) %>%
@@ -66,13 +68,17 @@ hasla_szczegolowe <- PBL_dzialy_path %>%
   filter(NAD_NAD_NAD_NAD_DZ_DZIAL_ID==144|NAD_NAD_NAD_DZ_DZIAL_ID==144|NAD_NAD_DZ_DZIAL_ID==144|NAD_DZ_DZIAL_ID==144) %>%
   select(DZ_DZIAL_ID,DZ_NAZWA)
 
+zycie_literackie <- PBL_dzialy_path %>%
+  filter(NAD_NAD_NAD_NAD_DZ_DZIAL_ID==270|NAD_NAD_NAD_DZ_DZIAL_ID==270|NAD_NAD_DZ_DZIAL_ID==270|NAD_DZ_DZIAL_ID==270) %>%
+  select(DZ_DZIAL_ID,DZ_NAZWA)
+
 pbl_records <- dbGetQuery(PBL,
                             "select z.za_zapis_id, dz.dz_dzial_id, z.za_ro_rok
 from IBL_OWNER.pbl_zapisy z
 join IBL_OWNER.pbl_dzialy dz on dz.dz_dzial_id=z.za_dz_dzial1_id
 where z.za_ro_rok between 1989 and 1992")
 
-nrow(merge(pbl_records,lit_obce,by = "DZ_DZIAL_ID")[1])
+nrow(merge(pbl_records,zycie_literackie,by = "DZ_DZIAL_ID")[1])
 
 nrow(pbl_records[1])
 
