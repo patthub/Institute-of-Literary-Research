@@ -1,0 +1,289 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+options(java.parameters = "-Xmx32000m")
+options(scipen = 999)
+pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,magrittr,jsonlite)
+
+#połączenie z bazą PBL
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
+#pobranie listy konkursów i nagród z działów Konkursy (życie literackie) i Nagrody (życie literackie) z osobami z indeksu
+pbl_ko_na_osoby <- RJDBC::dbGetQuery(PBL,
+                               "select z.za_zapis_id, dz.dz_dzial_id, dz.dz_nazwa, z.za_ro_rok, z.za_tytul, z.za_organizator, z.za_adnotacje, z.za_opis_imprezy,
+                                io.odi_nazwisko, io.odi_imie
+                                from pbl_dzialy dz
+                                join IBL_OWNER.pbl_zapisy z on z.za_dz_dzial1_id=dz.dz_dzial_id
+                                join IBL_OWNER.pbl_osoby_do_indeksu io on io.odi_za_zapis_id=z.za_zapis_id
+                                where dz_nazwa in ('Konkursy (życie literackie)', 'Nagrody (życie literackie)')
+                                and z.za_type = 'IR'")
+pbl_kona <- pbl_ko_na_osoby %>%
+  select(-ODI_NAZWISKO, -ODI_IMIE) %>%
+  filter(ZA_RO_ROK>1989&ZA_RO_ROK<2004) %>%
+  arrange(ZA_TYTUL) %>%
+  unique()
+write.csv2(pbl_kona, "C:/Users/cezar/Desktop/ko_na.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#listy osób dla lat 93-98
+osoby_kona <- pbl_ko_na %>%
+  select(ZA_RO_ROK, ODI_NAZWISKO, ODI_IMIE) %>%
+  unique() %>%
+  filter(ZA_RO_ROK>1992&ZA_RO_ROK<1999) %>%
+  arrange(ZA_RO_ROK,ODI_NAZWISKO,ODI_IMIE)
+#pierwsze zwycięstwo
+debiut_kona <- ddply(osoby_kona, .(ODI_NAZWISKO, ODI_IMIE), summarize, ZA_RO_ROK = paste(ZA_RO_ROK, collapse="|"))
+debiut_kona <- debiut_kona %>%
+  mutate(ZA_RO_ROK = str_replace(ZA_RO_ROK, "(^\\d{4})(.*)","\\1")) %>%
+  arrange(ZA_RO_ROK,ODI_NAZWISKO,ODI_IMIE)  
+
+#API VIAF
+library(httr)
+library(jsonlite)
+library(lubridate)
+options(stringsAsFactors = FALSE)
+
+url  <- "http://www.viaf.org"
+path <- "eurlex/directory_code"
+
+
+
+
+tt_GET <- function(path, ...){
+  if (is.null(path))
+    stop("Nothing to parse")
+  uri <- "http://www.viaf.org/"
+  # call api
+  req <- httr::GET(uri, path = path, ...)
+  # check for http status
+  tt_check(req)
+  req
+}
+tt_check <- function(req) {
+  if (req$status_code < 400)
+    return(invisible())
+  stop("HTTP failure: ", req$status_code, "\n", call. = FALSE)
+}
+
+tt_parse_js <- function(req) {
+  text <- httr::content(req, as = "text")
+  if (identical(text, ""))
+    stop("Not output to parse", call. = FALSE)
+  jsonlite::fromJSON(text)
+}
+
+viaf_get <- function(viaf = NULL) {
+  if(is.null(viaf))
+    stop("No viaf provided")
+  tt_GET(path = paste0("viaf/", viaf), httr::add_headers(Accept = "application/json+links")) %>%
+    tt_parse_js()
+}
+
+viaf_suggest <- function(query = NULL){
+  if(is.null(query))
+    stop ("No query provided")
+  tt_GET(path = "viaf/AutoSuggest", query = list(query = query)) %>%
+  tt_parse_js()
+}
+
+viaf_get("102333412")
+test <- viaf_suggest("cezary rosiński")
+test <- data.frame(test)
+
+
+
+
+library(viafr)
+library(dplyr)
+library(purrr)
+viaf_get(c("64013650", "102333412"))
+viaf_get("308780980")
+
+
+ludzie <- data.frame(osoba = c("anna gnot", "gabriela romanova", "gabi romanowa", "maciej maryl", "piotr wciślik", "cezary rosiński", "beata koper", "tomasz umerle", "vojtech malinek", "jacek biesiada", "tomasz mizerkiewicz"))
+
+x <- 1:length(ludzie$osoba)
+test3 <- data.frame(term = as.character(),displayForm = as.character(), nametype = as.character(), viafid = as.integer(), stringsAsFactors = FALSE)
+names(test2)
+
+for (i in x) {
+  #progress(match(i,x), max.value = length(x))
+  
+  test <- viaf_suggest(ludzie$osoba[i])
+  tryCatch({
+  test2 <- test$result %>%
+    select(term,displayForm,nametype,viafid)
+  }, error=function(e){
+                   test2 <<- data.frame(term = ludzie$osoba[i],displayForm = NA, nametype = NA, viafid =NA, stringsAsFactors = FALSE)
+})
+  test3 <- rbind(test3,test2)
+  
+}
+}
+```
+
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+options(scipen = 999)
+options(java.parameters = "-Xmx8192m")
+library(googlesheets)
+library(zoo)
+library(openxlsx)
+library(stringr)
+library(splitstackshape)
+library(plyr)
+library(dplyr)
+library(sqldf)
+library(stringdist)
+library(fuzzyjoin)
+library(data.table)
+library(svMisc)
+library(tidyverse)
+library(RJDBC)
+library(xlsx)
+
+#połączenie z bazą PBL
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
+#pobranie tabeli z konkursami
+konkursy_nagrody_tabela <- gs_read(gs_title("konkursy_nagrody_czy_artystyczne"), ws = "konkursy_nagrody_czy_artystyczn")
+konkursy_nagrody_tabela <- konkursy_nagrody_tabela %>%
+  select(ZA_ZAPIS_ID,ZA_TYTUL,ZA_RO_ROK,typ,decyzja = decyzja_dotyczaca_niepiszacych_laureatow, ZA_ADNOTACJE) %>%
+  filter(grepl("tak",decyzja)) %>%
+  filter(ZA_RO_ROK >1993&ZA_RO_ROK<2000)
+
+#pobranie indeksu dla konkursów i nagród
+
+indeks_kn_all <- dbGetQuery(PBL,
+                        "select z.za_zapis_id, z.za_ro_rok, z.za_tytul, z.za_adnotacje, io.odi_nazwisko, io.odi_imie
+                        from pbl_zapisy z
+                        join pbl_osoby_do_indeksu io on io.odi_za_zapis_id=z.za_zapis_id")
+indeks_kn <- merge(x = konkursy_nagrody_tabela, y = indeks_kn_all, by = "ZA_ZAPIS_ID", all.x = TRUE)
+indeks_kn <- indeks_kn %>%
+  select(ZA_ZAPIS_ID, ZA_TYTUL = ZA_TYTUL.x, ZA_RO_ROK=ZA_RO_ROK.x, typ, decyzja, ZA_ADNOTACJE=ZA_ADNOTACJE.x, ODI_NAZWISKO, ODI_IMIE)
+osoby_w_kn <- indeks_kn %>%
+  select(ODI_NAZWISKO,ODI_IMIE,ZA_ZAPIS_ID) %>%
+  group_by(ODI_NAZWISKO,ODI_IMIE) %>%
+  mutate(ZA_ZAPIS_ID = paste(ZA_ZAPIS_ID,collapse = ",")) %>%
+  unique()
+
+#pobranie twórców z PBLu
+
+tworcy <- dbGetQuery(PBL,
+                         "select distinct tw.tw_tworca_id, tw.tw_nazwisko, tw.tw_imie, tw.tw_rok_urodzin
+                        from IBL_OWNER.pbl_tworcy tw
+                        join IBL_OWNER.pbl_dzialy dz on dz.dz_dzial_id=tw.tw_dz_dzial_id
+                        join IBL_OWNER.pbl_zapisy_tworcy zt on zt.zatw_tw_tworca_id=tw.tw_tworca_id
+                        join IBL_OWNER.pbl_zapisy z on zt.zatw_za_zapis_id=z.za_zapis_id
+                        where dz.dz_dzial_id = 148
+                        and z.za_rz_rodzaj1_id in (1, 61, 87)
+                        order by tw.tw_tworca_id")
+
+#pobranie indeksu osobowego z antologii
+
+indeks_antologie <- dbGetQuery(PBL,
+                               "select z.za_zapis_id, z.za_ro_rok, z.za_tytul, z.za_adnotacje, io.odi_nazwisko, io.odi_imie
+                                from pbl_zapisy z
+                                join pbl_osoby_do_indeksu io on io.odi_za_zapis_id=z.za_zapis_id
+                                where z.za_dz_dzial1_id = 146")
+osoby_antologie <- indeks_antologie %>%
+  select(ODI_NAZWISKO,ODI_IMIE,ZA_ZAPIS_ID) %>%
+  group_by(ODI_NAZWISKO,ODI_IMIE) %>%
+  mutate(ZA_ZAPIS_ID = paste(ZA_ZAPIS_ID,collapse = ",")) %>%
+  unique()
+  
+#zderzenie osób z konkursów i nagród z twórcami
+
+osoby_w_kn <- osoby_w_kn %>%
+  mutate(osoba = paste(ODI_NAZWISKO,ODI_IMIE, sep = " ")) %>%
+  mutate(prosta = str_to_lower(str_replace_all(osoba, "\\W", "")))
+osoby_w_kn$ID <- seq.int(nrow(osoby_w_kn))
+
+tworcy <- tworcy %>%
+  mutate(osoba = paste(TW_NAZWISKO, TW_IMIE, sep = " ")) %>%
+  mutate(prosta = str_to_lower(str_replace_all(osoba, "\\W", "")))
+
+x <- 1:length(osoby_w_kn$ZA_ZAPIS_ID)
+
+hadron_tworcy <- data.frame(laureat_id = as.character(), ODI_NAZWISKO = as.character(), ODI_IMIE = as.character(), TW_TWORCA_ID = as.character(), TW_NAZWISKO = as.character(), TW_IMIE = as.character(), V1 = as.character(), stringsAsFactors=FALSE)
+for (i in x) {
+progress(i, max.value = length(x))
+lkj <- as.matrix(stringdistmatrix(a=osoby_w_kn$prosta[i],b=tworcy$prosta, method = "jw"))
+lkj <- data.frame(V1 = as.vector(lkj))
+kjh <- data.frame(laureat_id = rep(osoby_w_kn$ID[i], length(tworcy$prosta)), ODI_NAZWISKO = rep(osoby_w_kn$ODI_NAZWISKO[i], length(tworcy$prosta)), bn_imie = rep(osoby_w_kn$ODI_IMIE[i], length(tworcy$prosta)), n_aut = rep(osoby_w_kn$prosta[i], length(tworcy$prosta)), tworcy, lkj)
+kjh <- kjh[order(kjh$V1),]
+kjh <- kjh %>%
+  top_n(-5,V1) %>%
+  select(-n_aut,-osoba,-prosta)
+hadron_tworcy <- rbind(hadron_tworcy,kjh)
+}
+write.csv2(hadron_tworcy, "C:/Users/cezar/Desktop/hadron_tworcy.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(indeks_kn, "C:/Users/cezar/Desktop/indeks_kn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+#zderzenie osób z konkursów i nagród z indeksem z antologii
+
+osoby_antologie <- osoby_antologie %>%
+  mutate(osoba = paste(ODI_NAZWISKO, ODI_IMIE, sep = " ")) %>%
+  mutate(prosta = str_to_lower(str_replace_all(osoba, "\\W", "")))
+osoby_antologie$IDant <- seq.int(nrow(osoby_antologie))
+
+x <- 1:length(osoby_w_kn$ZA_ZAPIS_ID)
+
+hadron_antologie <- data.frame(laureat_id = as.character(), ODI_NAZWISKO = as.character(), ODI_IMIE = as.character(), antID = as.character(), ant_NAZWISKO = as.character(), ant_IMIE = as.character(), V1 = as.character(), stringsAsFactors=FALSE)
+for (i in x) {
+progress(i, max.value = length(x))
+lkj <- as.matrix(stringdistmatrix(a=osoby_w_kn$prosta[i],b=osoby_antologie$prosta, method = "jw"))
+lkj <- data.frame(V1 = as.vector(lkj))
+kjh <- data.frame(laureat_id = rep(osoby_w_kn$ID[i], length(osoby_antologie$prosta)), ODI_NAZWISKO = rep(osoby_w_kn$ODI_NAZWISKO[i], length(osoby_antologie$prosta)), bn_imie = rep(osoby_w_kn$ODI_IMIE[i], length(osoby_antologie$prosta)), n_aut = rep(osoby_w_kn$prosta[i], length(osoby_antologie$prosta)), osoby_antologie, lkj)
+kjh <- kjh[order(kjh$V1),]
+kjh <- kjh %>%
+  top_n(-5,V1) %>%
+  select(-n_aut,-osoba,-prosta,-ID)
+hadron_antologie <- rbind(hadron_antologie,kjh)
+}
+write.csv2(hadron_antologie, "C:/Users/cezar/Desktop/hadron_antologie.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(indeks_kn, "C:/Users/cezar/Desktop/indeks_kn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(indeks_antologie, "C:/Users/cezar/Desktop/indeks_antologie.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+```
+
+```{r budowa kartoteki konkursow i nagrod}
+#konkursy wraz z laureatami z indeksu
+indeks_kn <- gs_read(gs_title("konkursy_nagrody_czy_artystyczne"), ws = "konkursy_nagrody_czy_artystyczn") %>%
+  left_join(.,dbGetQuery(PBL,
+                        "select z.za_zapis_id, io.odi_nazwisko, io.odi_imie
+                        from pbl_zapisy z
+                        join pbl_osoby_do_indeksu io on io.odi_za_zapis_id=z.za_zapis_id"),by = "ZA_ZAPIS_ID") %>%
+  select(ZA_ZAPIS_ID, ZA_TYTUL, ZA_RO_ROK, typ, decyzja = decyzja_dotyczaca_niepiszacych_laureatow, ZA_ADNOTACJE, ODI_NAZWISKO, ODI_IMIE) %>%
+  mutate(osoba_out = NA)
+write.csv2(indeks_kn, "C:/Users/Cezary/Desktop/indeks_kn.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+#pobranie tabeli z konkursami
+konkursy_nagrody_tabela <- gs_read(gs_title("konkursy_nagrody_czy_artystyczne"), ws = "konkursy_nagrody_czy_artystyczn") %>%
+  select(ZA_ZAPIS_ID,ZA_TYTUL,ZA_RO_ROK,typ,decyzja = decyzja_dotyczaca_niepiszacych_laureatow, ZA_ADNOTACJE, ZA_ORGANIZATOR) %>%
+  select(1:3,6:7) %>%
+  mutate(name_simple = str_replace_all(str_to_lower(ZA_TYTUL), "\\W", ""),
+         for_unification = str_replace(name_simple,"(.*)(\\d{4}.*?$)","\\1")) %>%
+  arrange(for_unification,ZA_RO_ROK)
+write.csv2(konkursy_nagrody_tabela, "C:/Users/Cezary/Desktop/kartoteka_konkursów_i_nagród.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+#lista organizatorów
+
+organizers <- gs_read(gs_title("konkursy_nagrody_czy_artystyczne"), ws = "konkursy_nagrody_czy_artystyczn") %>%
+  select(ZA_ZAPIS_ID,ZA_TYTUL,ZA_RO_ROK,ZA_ORGANIZATOR) %>%
+  mutate(podzielony_organizator = str_replace_all(str_replace(ZA_ORGANIZATOR,"(.*?)([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ])(.*$)","\\2\\3"),",","|"))
+write.csv2(organizers, "C:/Users/Cezary/Desktop/organizatorzy_k&n.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+
+```
+

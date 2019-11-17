@@ -15,6 +15,13 @@ jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 trim <- function (x) gsub("^\\s+|\\s+$", "", x)
 pbl_hp <- read.csv2("C:/Users/Cezary/Desktop/pbl_subject_headings.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+pbl_viaf <- gs_read(gs_title("mapowanie_osob_bn_pbl"), ws = "pbl_bn") %>%
+  filter(czy_ten_sam!="nie") %>%
+  select(pbl_id,viaf) %>%
+  group_by(pbl_id) %>%
+  mutate(viaf = paste(unique(viaf),collapse = "|")) %>%
+  ungroup() %>%
+  unique()
 ```
 
 ```{r pbl books}
@@ -411,6 +418,7 @@ indeks_osobowy <- dbGetQuery(PBL,
 
 pbl_books <- merge(pbl_books,indeks_osobowy,by.x = "rekord_id",by.y = "ODI_ZA_ZAPIS_ID", all.x = TRUE)
 pbl_books <- merge(pbl_books,hasla_przekrojowe,by.x = "rekord_id", by.y = "HZ_ZA_ZAPIS_ID", all.x = TRUE)
+pbl_books <- merge(pbl_books,pbl_viaf,by.x = "tworca_id", by.y = "pbl_id", all.x = TRUE)
 ```
 
 ```{r creating pbl person authority file}
@@ -828,6 +836,7 @@ indeks_osobowy <- dbGetQuery(PBL,
 
 pbl_articles <- merge(pbl_articles,indeks_osobowy,by.x = "rekord_id",by.y = "ODI_ZA_ZAPIS_ID", all.x = TRUE)
 pbl_articles <- merge(pbl_articles,hasla_przekrojowe,by.x = "rekord_id", by.y = "HZ_ZA_ZAPIS_ID", all.x = TRUE)
+pbl_articles <- merge(pbl_articles,pbl_viaf,by.x = "tworca_id", by.y = "pbl_id", all.x = TRUE)
 ```
 
 ```{r final marc articles dataframe}
