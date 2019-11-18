@@ -281,7 +281,24 @@ write.csv2(konkursy_nagrody_tabela, "C:/Users/Cezary/Desktop/kartoteka_konkursó
 
 organizers <- gs_read(gs_title("konkursy_nagrody_czy_artystyczne"), ws = "konkursy_nagrody_czy_artystyczn") %>%
   select(ZA_ZAPIS_ID,ZA_TYTUL,ZA_RO_ROK,ZA_ORGANIZATOR) %>%
-  mutate(podzielony_organizator = str_replace_all(str_replace(ZA_ORGANIZATOR,"(.*?)([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ])(.*$)","\\2\\3"),",","|"))
+  left_join(.,dbGetQuery(PBL,
+                                "select hpz.hz_za_zapis_id \"ZA_ZAPIS_ID\",hp.hp_nazwa,khp.kh_nazwa
+from IBL_OWNER.pbl_hasla_przekrojowe hp
+join IBL_OWNER.pbl_hasla_przekr_zapisow hpz on hpz.hz_hp_haslo_id=hp.hp_haslo_id
+join IBL_OWNER.pbl_klucze_hasla_przekr khp on khp.kh_hp_haslo_id=hp.hp_haslo_id
+join IBL_OWNER.pbl_hasla_zapisow_klucze hzk on hzk.hzkh_hz_hp_haslo_id=hp.hp_haslo_id and hzk.hzkh_kh_klucz_id=khp.kh_klucz_id and hzk.hzkh_hz_za_zapis_id=hpz.hz_za_zapis_id"), by = "ZA_ZAPIS_ID") %>%
+  mutate(czy_wchodzi = grepl("Biblia|Czasopiśmiennictwo obce|Czasopiśmiennictwo polskie historia|Dydaktyka literatury|Filmy polskie|Filmy zagraniczne|Filologie|Genologia|Historia literatury polskiej|Konkursy|Kontakty kulturalne z zagranicą|Literatura a inne sztuki|Literatura anonimowa i ulotna|Literatura ludowa|Literatura regionalna|Literatura współczesna 1945-1989|Literatura współczesna po 1989|Literatury obce|Miejscowości w Polsce|Nagrody polskie|Nagrody zagraniczne|Odznaczenia|Plebiscyty|Przekłady z literatury polskiej na języki obce|Radio|Realizacje obce polskich utworów literackich (filmowe, teatralne, telewizyjne, radiowe)|Realizacje polskie obcych utworów literackich|Słowniki i encyklopedie|Teatr obcy|Telewizja|Tematy, motywy|Wydawnictwa obce|Wystawy|Zjazdy, festiwale, sesje w Polsce|Zjazdy, festiwale, sesje za granicą",HP_NAZWA),
+         HP_NAZWA = ifelse(czy_wchodzi==TRUE,NA,as.character(HP_NAZWA)),
+         KH_NAZWA = ifelse(czy_wchodzi==TRUE,NA,as.character(KH_NAZWA))) %>%
+  select(-czy_wchodzi,-HP_NAZWA) %>%
+  unique() %>%
+  arrange(ZA_ZAPIS_ID,KH_NAZWA) %>%
+  group_by(ZA_ZAPIS_ID,ZA_TYTUL,ZA_RO_ROK,ZA_ORGANIZATOR) %>%
+  mutate(KH_NAZWA = paste(KH_NAZWA,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  mutate(KH_NAZWA = str_remove_all(KH_NAZWA,"\\|NA|NA"))
+
 write.csv2(organizers, "C:/Users/Cezary/Desktop/organizatorzy_k&n.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 
 

@@ -19,7 +19,7 @@ pbl_viaf <- gs_read(gs_title("mapowanie_osob_bn_pbl"), ws = "pbl_bn") %>%
   filter(czy_ten_sam!="nie") %>%
   select(pbl_id,viaf) %>%
   group_by(pbl_id) %>%
-  mutate(viaf = paste(unique(viaf),collapse = "|")) %>%
+  mutate(viaf = paste(unique(viaf),collapse = "~")) %>%
   ungroup() %>%
   unique()
 ```
@@ -419,6 +419,10 @@ indeks_osobowy <- dbGetQuery(PBL,
 pbl_books <- merge(pbl_books,indeks_osobowy,by.x = "rekord_id",by.y = "ODI_ZA_ZAPIS_ID", all.x = TRUE)
 pbl_books <- merge(pbl_books,hasla_przekrojowe,by.x = "rekord_id", by.y = "HZ_ZA_ZAPIS_ID", all.x = TRUE)
 pbl_books <- merge(pbl_books,pbl_viaf,by.x = "tworca_id", by.y = "pbl_id", all.x = TRUE)
+pbl_books <- pbl_books %>%
+  mutate(tworca_imie = ifelse(is.na(tworca_id),NA,
+                              ifelse(is.na(viaf),as.character(tworca_imie),paste(tworca_imie,"$7",viaf,sep = "")))) %>%
+  arrange(rekord_id)
 ```
 
 ```{r creating pbl person authority file}
@@ -673,6 +677,7 @@ X651 <- pbl_books %>%
   ungroup() %>%
   unique() %>%
   full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  mutate(X651 = ifelse(is.na(X651),"\\4$aPBL",paste("\\4$aPBL|",X651,sep = ""))) %>%
   arrange(rekord_id)
 
 #X655
@@ -837,6 +842,10 @@ indeks_osobowy <- dbGetQuery(PBL,
 pbl_articles <- merge(pbl_articles,indeks_osobowy,by.x = "rekord_id",by.y = "ODI_ZA_ZAPIS_ID", all.x = TRUE)
 pbl_articles <- merge(pbl_articles,hasla_przekrojowe,by.x = "rekord_id", by.y = "HZ_ZA_ZAPIS_ID", all.x = TRUE)
 pbl_articles <- merge(pbl_articles,pbl_viaf,by.x = "tworca_id", by.y = "pbl_id", all.x = TRUE)
+pbl_articles <- pbl_articles %>%
+  mutate(tworca_imie = ifelse(is.na(tworca_id),NA,
+                              ifelse(is.na(viaf),as.character(tworca_imie),paste(tworca_imie,"$7",viaf,sep = "")))) %>%
+  arrange(rekord_id)
 ```
 
 ```{r final marc articles dataframe}
@@ -951,7 +960,7 @@ X610 <- pbl_articles %>%
   mutate(X610 = paste(X610,collapse = "|")) %>%
   ungroup() %>%
   unique() %>%
-  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
   arrange(rekord_id)
 
 #X611
@@ -1011,6 +1020,7 @@ X651 <- pbl_articles %>%
   ungroup() %>%
   unique() %>%
   full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  mutate(X651 = ifelse(is.na(X651),"\\4$aPBL",paste("\\4$aPBL|",X651,sep = ""))) %>%
   arrange(rekord_id)
 
 #X655

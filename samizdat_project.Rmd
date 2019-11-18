@@ -220,6 +220,8 @@ pbl_articles <- sqldf("select *
               where b.rekord_id not in (select a.rekord_id
               from pbl_articles a)")
 
+write.csv2(pbl_articles, "C:/Users/Cezary/Downloads/pbl_articles.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
 pbl_books1 <- dbGetQuery(PBL,
                         "select z.za_zapis_id \"rekord_id\", z.za_type \"typ\", rz.rz_rodzaj_id \"rodzaj_zapisu_id\", rz.rz_nazwa \"rodzaj_zapisu\", 
                           dz.dz_dzial_id \"dzial_id\", dz.dz_nazwa \"dzial\", to_char(tw.tw_tworca_id) \"tworca_id\", tw.tw_nazwisko \"tworca_nazwisko\",
@@ -419,6 +421,7 @@ pbl_books <- sqldf("select *
               from pbl_books1 b
               where b.rekord_id not in (select a.rekord_id
               from pbl_books a)")
+write.csv2(pbl_books, "C:/Users/Cezary/Downloads/pbl_books.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
 
 ```{r extracting personal data}
