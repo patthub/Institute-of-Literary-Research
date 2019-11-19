@@ -6,7 +6,7 @@ output: html_notebook
 ```{r libraries and conections}
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,magrittr,jsonlite)
+pacman::p_load(googlesheets4,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,magrittr,jsonlite)
 
 #połączenie z bazą PBL
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
@@ -15,9 +15,10 @@ jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 trim <- function (x) gsub("^\\s+|\\s+$", "", x)
 pbl_hp <- read.csv2("C:/Users/Cezary/Desktop/pbl_subject_headings.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
-pbl_viaf <- gs_read(gs_title("mapowanie_osob_bn_pbl"), ws = "pbl_bn") %>%
+pbl_viaf <- sheets_read(ss = "1cEz73dGN2r2-TTc702yne9tKfH9PQ6UyAJ2zBSV6Jb0") %>%
   filter(czy_ten_sam!="nie") %>%
   select(pbl_id,viaf) %>%
+  mutate(viaf = paste("viaf",str_extract(viaf,"\\d+"),sep = "")) %>%
   group_by(pbl_id) %>%
   mutate(viaf = paste(unique(viaf),collapse = "~")) %>%
   ungroup() %>%
@@ -810,10 +811,6 @@ pbl_articles <- dbGetQuery(PBL,
                         full outer join IBL_OWNER.pbl_osoby os on uo.uo_os_osoba_id=os.os_osoba_id
                         full outer join IBL_OWNER.pbl_funkcje_osob fo on fo.fo_symbol=uo.uo_fo_symbol
                         where z.za_type in ('IZA','PU')")
-test <- pbl_articles %>%
-  filter(is.na(tworca_nazwisko))
-
-test2 <- as.data.frame(table(pbl_articles$rekord_id))
 
 hasla_przekrojowe <- dbGetQuery(PBL,
                                 "select hpz.hz_za_zapis_id,hp.hp_nazwa,khp.kh_nazwa
@@ -960,7 +957,7 @@ X610 <- pbl_articles %>%
   mutate(X610 = paste(X610,collapse = "|")) %>%
   ungroup() %>%
   unique() %>%
-  full_join(.,pbl_books %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
   arrange(rekord_id)
 
 #X611
