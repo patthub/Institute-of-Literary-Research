@@ -52,7 +52,25 @@ remDr <- rD$client
 
 url <- c("https://data.bn.org.pl/api/bibs.json?author=seifert+jaroslav&amp;limit=100","https://data.bn.org.pl/api/bibs.json?limit=100&amp;subject=seifert+jaroslav")
 
+seifert_author <- jsonlite::fromJSON("https://data.bn.org.pl/api/bibs.json?author=seifert+jaroslav&amp;limit=100") %>% .$bibs %>%
+  select(-28)
 
+seifert_subject <- jsonlite::fromJSON("https://data.bn.org.pl/api/bibs.json?limit=100&amp;subject=seifert+jaroslav") %>% .$bibs %>%
+  select(-28)
+write.csv2(seifert_author, file = "C:/Users/Cezary/Desktop/seifert_author.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(seifert_subject, file = "C:/Users/Cezary/Desktop/seifert_subject.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+
+
+ name <- paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1275862") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1275862") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),sep = "|")
+  viaf <- str_remove_all(paste(unlist(jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1275862") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields),collapse = "|"),"(\\|NA)|(\\|viaf)")
+
+
+
+
+
+
+
+--------------------------------------------------------------
 x <- 1:length(url)
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
@@ -93,6 +111,32 @@ mat <- t(sapply(word.list, "[", i = seq.max))
 ####################
 test <- data.frame(nlp_json[1])
 ```
+```{r}
+pbl_bn_viaf <- gs_read(gs_title("mapowanie_osob_bn_pbl"), ws = "pbl_bn") %>%
+  select(id) %>%
+  unique()
+
+pbl_viaf <- data.frame(stringsAsFactors=FALSE)
+x <- 1:length(pbl_bn_viaf$id)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  tryCatch({
+  name <- paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1275862") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1275862") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),sep = "|")
+  viaf <- str_remove_all(paste(unlist(jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1275862") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields),collapse = "|"),"(\\|NA)|(\\|viaf)")
+  }, error=function(e){
+                     name <<- "brak danych (CR)"
+                     viaf <<- "brak danych (CR)"
+  })
+  iteration <- data.frame(id = pbl_bn_viaf$id[i], name = name, viaf = viaf)
+  pbl_viaf <- rbind(pbl_viaf,iteration)
+}
+write.csv2(pbl_viaf, file = "C:/Users/Cezary/Desktop/pbl_bn_viaf.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+
+
+a <- jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1275862") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields
+paste(unlist(a),sep = "|")
+```
+
 ```{r excercise}
 
 write.csv2(data1, file = "C:/Users/Cezary/Desktop/exercise.csv", row.names = F, na = '', fileEncoding = 'UTF-8')

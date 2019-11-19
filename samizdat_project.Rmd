@@ -7,14 +7,14 @@ output: html_notebook
 pacman::p_load(stringr,tidyverse,RJDBC,sqldf,dplyr,splitstackshape,svMisc,data.table)
 
 #downloading files
-#bn_books <- read.csv2("C:/Users/Cezary/Downloads/pw_ksiazki.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-bn_books <- read.csv2("C:/Users/cezar/Downloads/pw_ksiazki.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-#bn_articles <- read.csv2("C:/Users/Cezary/Downloads/pw_czasopisma.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-bn_articles <- read.csv2("C:/Users/cezar/Downloads/pw_czasopisma.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-#cz_books <- read.csv2("C:/Users/Cezary/Downloads/cz_pw_file_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-cz_books <- read.csv2("C:/Users/cezar/Downloads/cz_pw_file_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-#cz_articles <- read.csv2("C:/Users/Cezary/Downloads/cz_pw_file_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-cz_articles <- read.csv2("C:/Users/cezar/Downloads/cz_pw_file_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+bn_books <- read.csv2("C:/Users/Cezary/Downloads/pw_ksiazki.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+#bn_books <- read.csv2("C:/Users/cezar/Downloads/pw_ksiazki.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+bn_articles <- read.csv2("C:/Users/Cezary/Downloads/pw_czasopisma.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+#bn_articles <- read.csv2("C:/Users/cezar/Downloads/pw_czasopisma.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+cz_books <- read.csv2("C:/Users/Cezary/Downloads/cz_pw_file_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+#cz_books <- read.csv2("C:/Users/cezar/Downloads/cz_pw_file_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+cz_articles <- read.csv2("C:/Users/Cezary/Downloads/cz_pw_file_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
+#cz_articles <- read.csv2("C:/Users/cezar/Downloads/cz_pw_file_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 #connecting to PBL database
 jdbcDriver = JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
@@ -220,7 +220,7 @@ pbl_articles <- sqldf("select *
               where b.rekord_id not in (select a.rekord_id
               from pbl_articles a)")
 
-write.csv2(pbl_articles, "C:/Users/Cezary/Downloads/pbl_articles.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#write.csv2(pbl_articles, "C:/Users/Cezary/Downloads/pbl_articles.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 
 pbl_books1 <- dbGetQuery(PBL,
                         "select z.za_zapis_id \"rekord_id\", z.za_type \"typ\", rz.rz_rodzaj_id \"rodzaj_zapisu_id\", rz.rz_nazwa \"rodzaj_zapisu\", 
@@ -421,7 +421,7 @@ pbl_books <- sqldf("select *
               from pbl_books1 b
               where b.rekord_id not in (select a.rekord_id
               from pbl_books a)")
-write.csv2(pbl_books, "C:/Users/Cezary/Downloads/pbl_books.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#write.csv2(pbl_books, "C:/Users/Cezary/Downloads/pbl_books.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
 
 ```{r extracting personal data}
@@ -430,6 +430,8 @@ trim <- function (x) gsub("^\\s+|\\s+$", "", x)
 #field X100
 marc_field <- bn_books %>%
   select(id,X100)%>%
+  filter(X100!="") %>%
+  cSplit(.,"X100",sep = "|",direction = "long") %>%
   filter(X100!="")
 subfield_list<- str_extract_all(bn_books$X100,"\\%.")
 subfield_list<- unique(unlist(subfield_list))
@@ -479,6 +481,8 @@ bn_record_people_X100[] <- lapply(bn_record_people_X100, gsub, pattern='\\|NA', 
 #field X700
 marc_field <- bn_books %>%
   select(id,X700)%>%
+  filter(X700!="") %>%
+  cSplit(.,"X700",sep = "|",direction = "long") %>%
   filter(X700!="")
 subfield_list<- str_extract_all(bn_books$X700,"\\%.")
 subfield_list<- unique(unlist(subfield_list))
@@ -528,6 +532,8 @@ bn_record_people_X700[] <- lapply(bn_record_people_X700, gsub, pattern='\\|NA', 
 #field X701
 marc_field <- bn_books %>%
   select(id,X701)%>%
+  filter(X701!="") %>%
+  cSplit(.,"X701",sep = "|",direction = "long") %>%
   filter(X701!="")
 subfield_list<- str_extract_all(bn_books$X701,"\\%.")
 subfield_list<- unique(unlist(subfield_list))
@@ -622,6 +628,8 @@ bn_record_people <- bn_record_people %>%
 #field X100
 marc_field <- cz_books %>%
   select(id,X100)%>%
+  filter(X100!="") %>%
+  cSplit(.,"X100",sep = "|",direction = "long") %>%
   filter(X100!="")
 marc_field <- mutate(marc_field,
                indicator = str_replace_all(marc_field$X100,"(^.*?)(\\$.*)","\\1"))
@@ -664,6 +672,8 @@ cz_record_people_X100[] <- lapply(cz_record_people_X100, gsub, pattern='\\|NA', 
 #field X600
 marc_field <- cz_books %>%
   select(id,X600)%>%
+  filter(X600!="") %>%
+  cSplit(.,"X600",sep = "|",direction = "long") %>%
   filter(X600!="")
 marc_field <- mutate(marc_field,
                indicator = str_replace_all(marc_field$X600,"(^.*?)(\\$.*)","\\1"))
@@ -706,6 +716,8 @@ cz_record_people_X600[] <- lapply(cz_record_people_X600, gsub, pattern='\\|NA', 
 #field X700
 marc_field <- cz_books %>%
   select(id,X700)%>%
+  filter(X700!="") %>%
+  cSplit(.,"X700",sep = "|",direction = "long") %>%
   filter(X700!="")
 marc_field <- mutate(marc_field,
                indicator = str_replace_all(marc_field$X700,"(^.*?)(\\$.*)","\\1"))
@@ -771,6 +783,8 @@ cz_record_people <- cz_record_people %>%
 #field X100
 marc_field <- cz_articles %>%
   select(id,X100)%>%
+  filter(X100!="") %>%
+  cSplit(.,"X100",sep = "|",direction = "long") %>%
   filter(X100!="")
 marc_field <- mutate(marc_field,
                indicator = str_replace_all(marc_field$X100,"(^.*?)(\\$.*)","\\1"))
@@ -813,6 +827,8 @@ cz_record_people_art_X100[] <- lapply(cz_record_people_art_X100, gsub, pattern='
 #field X600
 marc_field <- cz_articles %>%
   select(id,X600)%>%
+  filter(X600!="") %>%
+  cSplit(.,"X600",sep = "|",direction = "long") %>%
   filter(X600!="")
 marc_field <- mutate(marc_field,
                indicator = str_replace_all(marc_field$X600,"(^.*?)(\\$.*)","\\1"))
@@ -855,6 +871,8 @@ cz_record_people_art_X600[] <- lapply(cz_record_people_art_X600, gsub, pattern='
 #field X700
 marc_field <- cz_articles %>%
   select(id,X700)%>%
+  filter(X700!="") %>%
+  cSplit(.,"X700",sep = "|",direction = "long") %>%
   filter(X700!="")
 marc_field <- mutate(marc_field,
                indicator = str_replace_all(marc_field$X700,"(^.*?)(\\$.*)","\\1"))
@@ -1018,8 +1036,8 @@ pbl_record_people_art <- rbind(pbl_record_people_art_creators,pbl_record_people_
 #putting all together
 record_people <- rbind(bn_record_people,cz_record_people,cz_record_people_art,pbl_record_people_books,pbl_record_people_art)
 
-test <- record_people %>%
-  filter(grepl("Amsterdamski|Żerski",name_form))
+#test <- record_people %>%
+#  filter(grepl("Amsterdamski|Żerski",name_form))
 
 #id tymczas, nazwa, id nazwy, id osoby
 tab_2 <- record_people %>%
@@ -1081,7 +1099,7 @@ for (i in x) {
 tab_4 <- tab_4 %>%
   select(id = temp_id2,name_form,name_simple,name_form_id,id_osoby)
 
-write.csv2(tab_4, "C:/Users/cezar/Desktop/samizdat_kartoteka_osób.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(tab_4, "C:/Users/Cezary/Desktop/samizdat_kartoteka_osób.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 ----------
 
