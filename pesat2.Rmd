@@ -7,14 +7,14 @@ output: html_notebook
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
 pacman::p_load(googlesheets4,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,magrittr,jsonlite)
+trim <- function (x) gsub("^\\s+|\\s+$", "", x)
+pbl_hp <- read.csv2("C:/Users/Cezary/Desktop/pbl_subject_headings.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 
 #połączenie z bazą PBL
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
 jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
-trim <- function (x) gsub("^\\s+|\\s+$", "", x)
-pbl_hp <- read.csv2("C:/Users/Cezary/Desktop/pbl_subject_headings.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 pbl_viaf <- sheets_read(ss = "1cEz73dGN2r2-TTc702yne9tKfH9PQ6UyAJ2zBSV6Jb0") %>%
   filter(czy_ten_sam!="nie") %>%
   select(pbl_id,viaf) %>%
@@ -451,6 +451,7 @@ write.csv2(pbl_viaf, file = "C:/Users/Cezary/Desktop/pbl_bn_viaf.csv", row.names
 ```
 
 ```{r final marc books dataframe}
+pbl_books <- read.csv2("C:/Users/Cezary/Desktop/cz_books.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 #empty data.frame
 pbl_marc <- data.frame(LDR = character(), X001 = character(), X590 = character(), X964 = character(), X100 = character(), X600 = character(), X245 = character(), X700 = character(), X520 = character(), X240 = character(), X300 = character(), X250 = character(), X710 = character(), X490 = character(), X610 = character(), X630 = character(), X787 = character(), X650 = character(), X651 = character(), X655 = character(),  X611 = character(), X264 = character(), stringsAsFactors=FALSE) %>%
   select(noquote(order(colnames(.))))
@@ -1130,3 +1131,5 @@ long <- reshape(pbl_marc_articles,
   write.table(., "pbl_marc_articles.csv", append = FALSE, sep = "  ", dec = ",", row.names = FALSE, col.names = FALSE, quote = FALSE, fileEncoding = "UTF-8")
 
 ```
+
+
