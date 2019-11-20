@@ -8,7 +8,8 @@ options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
 pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,RJSONIO,pdftools,readtext)
 
-korbut <- readtext("C:\\Users\\cezar\\Desktop\\korbutam.txt",encoding = "UTF-8")
+#korbut <- readtext("C:\\Users\\cezar\\Desktop\\korbutam.txt",encoding = "UTF-8")
+korbut <- readtext("C:\\Users\\Cezary\\Desktop\\korbutam.txt",encoding = "UTF-8")
 korbut <- korbut$text %>% 
   strsplit(split = "\n")
 korbut <- as.data.frame(korbut)
