@@ -1,0 +1,48 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r bibliografia Mickiewicza}
+pacman::p_load(googlesheets4,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,rvest,RSelenium,RJDBC,rjson,jsonlite,sqldf,XML,methods)
+
+#API BN
+mickiewicz_autor <- jsonlite::fromJSON("https://data.bn.org.pl/api/bibs.json?author=Mickiewicz%2C+Adam+%281798-1855%29&amp;limit=100") %>% .$bibs %>%
+  select(-28)
+
+mickiewicz_temat <- jsonlite::fromJSON("https://data.bn.org.pl/api/bibs.json?limit=100&amp;subject=Mickiewicz%2C+Adam+%281798-1855%29") %>% .$bibs %>%
+  select(-28)
+
+#przetworzenie bazy BN
+
+#1. Uzyskanie wszystkich form nazewnictw Mickiewicza
+
+mickiewicz_nazwy <- data.frame(nazwy = paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1004227") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1004227") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),sep = "|")) %>%
+  cSplit(.,"nazwy",sep = "|", direction = "long") %>%
+  mutate(nazwy = ifelse(grepl("\\(\\d+",nazwy),
+                        paste("$a",str_replace(nazwy,"(.*?)( )(\\(.*?$)","\\1"),"$d",str_replace(nazwy,"(.*?)( )(\\(.*?$)","\\3"),sep = ""),
+                        paste("$a",nazwy,sep = "")))
+
+#2. Wydobycie rekordów bibliograficznych BN za 2009 rok
+
+bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
+
+mickiewicz_ks1 <- sqldf("select *
+                       from bn_ks a
+                       join mickiewicz_nazwy b on a.X100 like ('%'||b.nazwy||'%')")
+mickiewicz_ks2 <- sqldf("select *
+                       from bn_ks a
+                       join mickiewicz_nazwy b on a.X600 like ('%'||b.nazwy||'%')")
+mickiewicz_ks3 <- sqldf("select *
+                       from bn_ks a
+                       join mickiewicz_nazwy b on a.X700 like ('%'||b.nazwy||'%')")
+mickiewicz_ks <- rbind(mickiewicz_ks1,mickiewicz_ks2,mickiewicz_ks3) %>%
+  select(X245,X100,X600,X700)
+
+#3. Mickiewicz w VIAF
+ 
+  viaf <- str_remove_all(paste(unlist(jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1004227") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields),collapse = "|"),"(\\|NA)|(\\|viaf)")
+
+
+
+```
