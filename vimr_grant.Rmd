@@ -1,0 +1,87 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+#API VIAF
+library(httr)
+library(jsonlite)
+library(lubridate)
+options(stringsAsFactors = FALSE)
+library(tidyverse)
+url  <- "http://www.viaf.org"
+path <- "eurlex/directory_code"
+
+
+
+
+tt_GET <- function(path, ...){
+  if (is.null(path))
+    stop("Nothing to parse")
+  uri <- "http://www.viaf.org/"
+  # call api
+  req <- httr::GET(uri, path = path, ...)
+  # check for http status
+  tt_check(req)
+  req
+}
+tt_check <- function(req) {
+  if (req$status_code < 400)
+    return(invisible())
+  stop("HTTP failure: ", req$status_code, "\n", call. = FALSE)
+}
+
+tt_parse_js <- function(req) {
+  text <- httr::content(req, as = "text")
+  if (identical(text, ""))
+    stop("Not output to parse", call. = FALSE)
+  jsonlite::fromJSON(text)
+}
+
+viaf_get <- function(viaf = NULL) {
+  if(is.null(viaf))
+    stop("No viaf provided")
+  tt_GET(path = paste0("viaf/", viaf), httr::add_headers(Accept = "application/json+links")) %>%
+    tt_parse_js()
+}
+
+viaf_suggest <- function(query = NULL){
+  if(is.null(query))
+    stop ("No query provided")
+  tt_GET(path = "viaf/AutoSuggest", query = list(query = query)) %>%
+  tt_parse_js()
+}
+
+kundera <- viaf_get("51691735")
+
+
+test <- viaf_suggest("ondrej vimr")
+test <- data.frame(test)
+```
+
+```{r}
+options(java.parameters = "-Xmx32000m")
+options(scipen = 999)
+pacman::p_load(googlesheets4,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,magrittr,jsonlite)
+
+
+pbl_viaf <- sheets_read(ss = "1cEz73dGN2r2-TTc702yne9tKfH9PQ6UyAJ2zBSV6Jb0")
+viaf_value <- pbl_viaf %>%
+  mutate(viaf_id = str_extract(viaf,"\\d+")) %>%
+  select(viaf_id) %>%
+  filter(!is.na(viaf_id)) %>%
+  unique()
+x <- 1:length(viaf_value$viaf_id)
+data_frame <- data.frame(stringsAsFactors = TRUE)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  iteration <- data.frame(test = paste(viaf_get(as.character(viaf_value$viaf_id[i])),collapse = "|"))
+  data_frame <- rbind(data_frame,iteration)
+}
+```
+
+
+
