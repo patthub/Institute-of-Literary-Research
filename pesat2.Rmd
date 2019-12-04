@@ -437,7 +437,7 @@ x <- 1:length(pbl_bn_viaf$id)
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
   tryCatch({
-  name <- paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),sep = "|")
+  name <- paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\.+)"," \\2"),sep = "|")
   viaf <- str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields),collapse = "|"),"(\\|NA)|(\\|viaf)")
   }, error=function(e){
                      name <<- "brak danych (CR)"

@@ -7,7 +7,14 @@ output: html_notebook
 #biblioteki
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,ggmap)
+options(encoding = "UTF-8")
+install.packages("installr")
+library("installr")
+install.Rtools()
+install.packages("devtools")
+devtools::install_github("r-lib/gargle")
+library(gargle)
+pacman::p_load(utf8,googlesheets,googlesheets4,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,ggmap)
 
 #wgranie zbiorów książek
 bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
@@ -232,9 +239,20 @@ jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 
 #wczytanie listy utożsamionych twórców z autorami BN
-ludzie_bn_pbl <- gs_read(gs_title("mapowanie_osob_bn_pbl"), ws = "pbl_bn") %>%
-  filter(is.na(czy_ten_sam)|czy_ten_sam!="nie") %>%
+pbl_viaf <- sheets_read(ss = "1cEz73dGN2r2-TTc702yne9tKfH9PQ6UyAJ2zBSV6Jb0") %>%
+  filter(czy_ten_sam!="nie") %>%
   select(pbl_id, bn_id = id, name) %>%
+  mutate(name = str_replace_all(name,"\\|\\(", " ("))
+
+options(gargle::gargle_oauth_("cezary.rosinski@gmail.com"))
+Encoding(pbl_viaf$name) <- "UTF-8"
+googlesheets4::sheets_token()
+Sys.getlocale()
+
+
+
+
+%>%
   mutate(name = str_replace_all(name,"(\\d\\))( )","\\1|")) %>%
   mutate(name = str_replace_all(name,"([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪŮYÝCĆČÇDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢZŻŹŽa-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž\\)'-]+,)","|\\1")) %>%
   mutate(name = str_replace_all(name,"([\\)])( )([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪŮYÝCĆČÇDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢZŻŹŽa-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž\\)'-]+)","\\1|\\3"))
