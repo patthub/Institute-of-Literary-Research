@@ -7,14 +7,8 @@ output: html_notebook
 #biblioteki
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-options(encoding = "UTF-8")
-install.packages("installr")
-library("installr")
-install.Rtools()
-install.packages("devtools")
-devtools::install_github("r-lib/gargle")
-library(gargle)
-pacman::p_load(utf8,googlesheets,googlesheets4,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,ggmap)
+pacman::p_load(utf8,googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC)
+
 
 #wgranie zbiorów książek
 bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
@@ -242,22 +236,9 @@ PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "I
 pbl_viaf <- sheets_read(ss = "1cEz73dGN2r2-TTc702yne9tKfH9PQ6UyAJ2zBSV6Jb0") %>%
   filter(czy_ten_sam!="nie") %>%
   select(pbl_id, bn_id = id, name) %>%
-  mutate(name = str_replace_all(name,"\\|\\(", " ("))
-
-options(gargle::gargle_oauth_("cezary.rosinski@gmail.com"))
-Encoding(pbl_viaf$name) <- "UTF-8"
-googlesheets4::sheets_token()
-Sys.getlocale()
-
-
-
-
-%>%
-  mutate(name = str_replace_all(name,"(\\d\\))( )","\\1|")) %>%
-  mutate(name = str_replace_all(name,"([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪŮYÝCĆČÇDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢZŻŹŽa-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž\\)'-]+,)","|\\1")) %>%
-  mutate(name = str_replace_all(name,"([\\)])( )([A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪŮYÝCĆČÇDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢZŻŹŽa-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž\\)'-]+)","\\1|\\3"))
-
-ludzie_bn_pbl <- cSplit(ludzie_bn_pbl,"name",sep = "|",direction = "long") %>%
+  mutate(name = str_replace_all(name,"\\|\\(", " ("),
+         name = str_replace_all(name, "\\;\\|", "; ")) %>%
+  cSplit(.,"name",sep = "|",direction = "long") %>%
   filter(name!="")
 
 #listy nazwisk BN ze zbioru
@@ -265,8 +246,8 @@ ludzie_bn_pbl <- cSplit(ludzie_bn_pbl,"name",sep = "|",direction = "long") %>%
 marc_field_100 <- bn_ks %>%
   select(id,X100)%>%
   filter(X100!="") %>%
-  mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1"))
-marc_field_100<- cSplit(marc_field_100,"X100",sep = "~",direction = "long") %>%
+  mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X100",sep = "~",direction = "long") %>%
   filter(X100!="") %>%
   mutate(X100=str_remove_all(X100,"^\\|")) %>%
   mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
@@ -274,14 +255,11 @@ subfield_list<- str_extract_all(bn_ks$X100,"\\$.")
 subfield_list<- unique(unlist(subfield_list))
 empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
 colnames(empty_table) <-subfield_list
-
 marc_field_100<-cbind(marc_field_100,empty_table)
-
 subfield_list_char <- paste("(",subfield_list,")",sep = "")
 subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
 
 x <- 1:length(subfield_list)
-
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
   marc_field_100$X100 <- str_replace(marc_field_100$X100,subfield_list_char[i],"|\\1")
@@ -298,14 +276,15 @@ for (i in x) {
 marc_field_100 <- marc_field_100 %>%
   select(id,`$a`,`$d`,`$c`) %>%
   mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
-  select(id,name)
-marc_field_100$name <- str_replace(marc_field_100$name,"(\\))(\\.$)","\\1")
+  select(id,name) %>%
+  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
+         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
 #600
 marc_field_600 <- bn_ks %>%
   select(id,X600)%>%
   filter(X600!="") %>%
-  mutate(X600=str_replace_all(X600,"(^|\\|)","~\\1"))
-marc_field_600<- cSplit(marc_field_600,"X600",sep = "~",direction = "long") %>%
+  mutate(X600=str_replace_all(X600,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X600",sep = "~",direction = "long") %>%
   filter(X600!="") %>%
   mutate(X600=str_remove_all(X600,"^\\|")) %>%
   mutate(indicator = str_replace_all(X600,"(^.*?)(\\$.*)","\\1"))
@@ -313,12 +292,9 @@ subfield_list<- str_extract_all(bn_ks$X600,"\\$.")
 subfield_list<- unique(unlist(subfield_list))
 empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_600)[1]))
 colnames(empty_table) <-subfield_list
-
 marc_field_600<-cbind(marc_field_600,empty_table)
-
 subfield_list_char <- paste("(",subfield_list,")",sep = "")
 subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
-
 x <- 1:length(subfield_list)
 
 for (i in x) {
@@ -337,14 +313,15 @@ for (i in x) {
 marc_field_600 <- marc_field_600 %>%
   select(id,`$a`,`$d`,`$c`) %>%
   mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
-  select(id,name)
-marc_field_600$name <- str_replace(marc_field_600$name,"(\\))(\\.$)","\\1")
+  select(id,name) %>%
+  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
+         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
 #700
 marc_field_700 <- bn_ks %>%
   select(id,X700)%>%
   filter(X700!="") %>%
-  mutate(X700=str_replace_all(X700,"(^|\\|)","~\\1"))
-marc_field_700<- cSplit(marc_field_700,"X700",sep = "~",direction = "long") %>%
+  mutate(X700=str_replace_all(X700,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X700",sep = "~",direction = "long") %>%
   filter(X700!="") %>%
   mutate(X700=str_remove_all(X700,"^\\|")) %>%
   mutate(indicator = str_replace_all(X700,"(^.*?)(\\$.*)","\\1"))
@@ -352,12 +329,9 @@ subfield_list<- str_extract_all(bn_ks$X700,"\\$.")
 subfield_list<- unique(unlist(subfield_list))
 empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_700)[1]))
 colnames(empty_table) <-subfield_list
-
 marc_field_700<-cbind(marc_field_700,empty_table)
-
 subfield_list_char <- paste("(",subfield_list,")",sep = "")
 subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
-
 x <- 1:length(subfield_list)
 
 for (i in x) {
@@ -376,17 +350,17 @@ for (i in x) {
 marc_field_700 <- marc_field_700 %>%
   select(id,`$a`,`$d`,`$c`) %>%
   mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
-  select(id,name)
-marc_field_700$name <- str_replace(marc_field_700$name,"(\\))(\\.$)","\\1")
-
+  select(id,name) %>%
+  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
+         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
+#utożsamianie po nazewnictwie
 marc_fields <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
   unique() %>%
-  mutate(name = str_replace(name,"([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
-#utożsamianie po nazewnictwie
+  inner_join(.,pbl_viaf,by = "name") %>%
+  select(1:3)
 
-name_match <- merge(marc_fields,ludzie_bn_pbl,by = "name") %>%
-  select(id) %>%
-  unique()
+
+###TUTAJ###
 
 rekordy_nazwiska <- sqldf("select *
                     from reszta a
@@ -451,7 +425,7 @@ test <- bn_ok %>%
   select(kraj) %>%
   unique()
 
-
+###poszukać, czy fraza pol albo nazwiska z PBL gdzieś się pojawiają w uwagach###
 
 
 
