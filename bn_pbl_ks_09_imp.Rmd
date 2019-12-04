@@ -9,7 +9,6 @@ options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
 pacman::p_load(utf8,googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC)
 
-
 #wgranie zbiorów książek
 bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
 #bn_ks <- read.csv2("C:/Users/cezar/Desktop/bn_ks.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
@@ -23,8 +22,8 @@ bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8
 gatunki_litX655 <- data.frame(X655 = UKD_lit$X655) %>%
   unique() %>%
   filter(!is.na(X655)) %>%
-  mutate(X655 = str_replace_all(X655,"(^|\\|)","~\\1"))
-gatunki_litX655 <- cSplit(gatunki_litX655,"X655",sep = "~",direction = "long") %>%
+  mutate(X655 = str_replace_all(X655,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X655",sep = "~",direction = "long") %>%
   filter(X655!="") %>%
   mutate(X655 = str_replace_all(X655,"(.*?)(\\$a.*)(\\$2.*)","\\2")) %>%
   unique() %>%
@@ -34,8 +33,8 @@ gatunki_litX655 <- cSplit(gatunki_litX655,"X655",sep = "~",direction = "long") %
 gatunki_litX650 <- data.frame(X650 = UKD_lit$X650) %>%
   unique() %>%
   filter(!is.na(X650)) %>%
-  mutate(X650 = str_replace_all(X650,"(^|\\|)","~\\1"))
-gatunki_litX650 <- cSplit(gatunki_litX650,"X650",sep = "~",direction = "long") %>%
+  mutate(X650 = str_replace_all(X650,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X650",sep = "~",direction = "long") %>%
   filter(X650!="") %>%
   mutate(X650 = str_replace_all(X650,"(.*?)(\\$a.*)(\\$2.*)","\\2")) %>%
   unique() %>%
@@ -52,34 +51,31 @@ gatunki_lit <- rbind(gatunki_litX655,gatunki_litX650) %>%
 
 gatunki_tfrtvX655 <- data.frame(X655 = UKD_tfrtv$X655) %>%
   unique() %>%
-  filter(!is.na(X655))
-
-gatunki_tfrtvX655$X655<-str_replace_all(gatunki_tfrtvX655$X655,"(^|\\|)","~\\1")
-gatunki_tfrtvX655<- cSplit(gatunki_tfrtvX655,"X655",sep = "~",direction = "long")
-gatunki_tfrtvX655<- gatunki_tfrtvX655%>%
-  filter(X655!="")
-gatunki_tfrtvX655$X655 <- str_replace_all(gatunki_tfrtvX655$X655,"(.*?)(\\$a.*)(\\$2.*)","\\2")
-gatunki_tfrtvX655 <- gatunki_tfrtvX655 %>%
-  unique()
-gatunki_tfrtvX655 <- data.frame(gatunki = gatunki_tfrtvX655$X655, pole = "X655")
-
-gatunki_tfrtvX650 <- data.frame(X650 = UKD_lit$X650) %>%
+  filter(!is.na(X655)) %>%
+  mutate(X655 = str_replace_all(X655,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X655",sep = "~",direction = "long") %>%
+  filter(X655!="") %>%
+  mutate(X655 = str_replace_all(X655,"(.*?)(\\$a.*)(\\$2.*)","\\2")) %>%
   unique() %>%
-  filter(!is.na(X650))
-gatunki_tfrtvX650$X650 <-str_replace_all(gatunki_tfrtvX650$X650,"(^|\\|)","~\\1")
-gatunki_tfrtvX650 <- cSplit(gatunki_tfrtvX650,"X650",sep = "~",direction = "long")
-gatunki_tfrtvX650 <- gatunki_tfrtvX650%>%
-  filter(X650!="")
-gatunki_tfrtvX650$X650 <- str_replace_all(gatunki_tfrtvX650$X650,"(.*?)(\\$a.*)(\\$2.*)","\\2")
-gatunki_tfrtvX650 <- gatunki_tfrtvX650 %>%
-  unique()
-gatunki_tfrtvX650 <- data.frame(gatunki = gatunki_tfrtvX650$X650, pole = "X650")
+  mutate(pole = "X655") %>%
+  rename(gatunki = X655) %>%
+  select(gatunki,pole)
 
-gatunki_tfrtv <- rbind(gatunki_tfrtvX655,gatunki_tfrtvX650)
+gatunki_tfrtvX650 <- data.frame(X650 = UKD_tfrtv$X650) %>%
+  unique() %>%
+  filter(!is.na(X650)) %>%
+  mutate(X650 = str_replace_all(X650,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X650",sep = "~",direction = "long") %>%
+  filter(X650!="") %>%
+  mutate(X650 = str_replace_all(X650,"(.*?)(\\$a.*)(\\$2.*)","\\2")) %>%
+  unique() %>%
+  mutate(pole = "X650") %>%
+  rename(gatunki = X650) %>%
+  select(gatunki,pole)
 
-gatunki_tfrtv$gatunki <- str_remove_all(gatunki_tfrtv$gatunki, ".*?\\$a")
-gatunki_tfrtv <- gatunki_tfrtv[order(gatunki_tfrtv$pole,gatunki_tfrtv$gatunki),]
-gatunki_tfrtv <- gatunki_tfrtv %>%
+gatunki_tfrtv <- rbind(gatunki_tfrtvX655,gatunki_tfrtvX650) %>%
+  mutate(gatunki = str_remove_all(gatunki, ".*?\\$a")) %>%
+  arrange(pole,gatunki) %>%
   unique()
 
 #write.csv2(gatunki_tfrtv, "C:/Users/User/Desktop/gatunki_tfrtv.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
@@ -87,159 +83,15 @@ gatunki_tfrtv <- gatunki_tfrtv %>%
 
 ```
 
-```{r gatunkowanie}
-#wczytanie wyselekcjonowanych gatunków literackich
-gatunki_lit <- gs_read(gs_title("gatunki_literackie_2005-2008"), ws = "gatunki_literackie") %>%
-  filter(`czy_gat_literacki?`=="tak") %>%
-  select(1,2) %>%
-  unique()
-gatunki_lit_1 <- gatunki_lit %>%
-  filter(pole=="X655") %>%
-  select(1)
-gatunki_lit_2 <- gatunki_lit %>%
-  filter(pole=="X650") %>%
-  select(1)
-#filtrowanie po UKD literackim
-UKD_lit <- bn_ks %>%
-  mutate(ukd_lit = grepl("\\$a8", X080)) %>%
-  filter(ukd_lit == TRUE) %>%
-  select(-ukd_lit)
-#szukanie po wybranych gatunkach literackich
-UKD_lita <- sqldf("select *
-                          from UKD_lit a
-                          join gatunki_lit_1 b on a.X655 like ('%'||b.gatunki||'%')")
-UKD_lita <- UKD_lita  %>%
-  select(-length(UKD_lita)) %>%
-  unique()
-UKD_litb <- sqldf("select *
-                          from UKD_lit a
-                          join gatunki_lit_2 b on a.X650 like ('%'||b.gatunki||'%')")
-UKD_litb <- UKD_litb  %>%
-  select(-length(UKD_litb)) %>%
-  unique()
-UKD_lit <- sqldf("select *
-                      from UKD_lit a
-                      where a.id in (select a.id from UKD_lita a)
-                      or a.id in (select a.id from UKD_litb a)")
-UKD_lit <-UKD_lit[order(UKD_lit$X655,UKD_lit$X600),]
-UKD_lit <- UKD_lit %>%
-  filter(X380!="\\\\$aArtykuły|\\\\$Druki ulotne") %>%
-  filter(!grepl("\\$aNadbitki i odbitki",X655)) %>%
-  filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="")
-
-#gat_lit_bez_UKD_lit
-
-bez_UKD_lit <- sqldf("select *
-               from bn_ks a
-               where a.id not in 
-               (select b.id
-               from UKD_lit b)")
-
-bez_UKD_lit_a <- sqldf("select *
-                          from bez_UKD_lit a
-                          join gatunki_lit_1 b on a.X655 like ('%'||b.gatunki||'%')")
-bez_UKD_lit_b <- sqldf("select *
-                          from bez_UKD_lit a
-                          join gatunki_lit_2 b on a.X650 like ('%'||b.gatunki||'%')")
-
-bez_UKD_lit <- sqldf("select *
-                      from bez_UKD_lit a
-                      where a.id in (select a.id from bez_UKD_lit_a a)
-                      or a.id in (select a.id from bez_UKD_lit_b a)")
-bez_UKD_lit <-bez_UKD_lit[order(bez_UKD_lit$X655,bez_UKD_lit$X600),]
-
-bez_UKD_lit <- bez_UKD_lit %>%
-  filter(X380!="\\\\$aArtykuły|\\\\$Druki ulotne") %>%
-  filter(!grepl("\\$aNadbitki i odbitki",X655)) %>%
-  filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="")
-
-#UKD_tfrtv
-UKD_tfrtv <- bn_ks %>%
-  mutate(ukd_tfrtv = grepl("\\$a7\\.01", X080)|grepl("\\$a7\\.03", X080)|grepl("\\$a7\\.03\\(438\\)\\(091\\)", X080)|grepl("\\$a7\\.07", X080)|grepl("\\$a7\\.096", X080)|grepl("\\$a7\\.097", X080)|grepl("\\$a79", X080)|grepl("\\$a791", X080)|grepl("\\$a791\\.4", X080)|grepl("\\$a792", X080)|grepl("\\$a792\\.071", X080)|grepl("\\$a792\\.09", X080)) %>%
-  filter(ukd_tfrtv == TRUE) %>%
-  select(-(length(bn_ks)+1))
-UKD_tfrtv <- sqldf("select *
-               from UKD_tfrtv a
-               where a.id not in 
-               (select b.id
-               from bez_UKD_lit b)
-               and a.id not in 
-               (select b.id
-               from UKD_lit b)")
-
-#bez_UKD_tfrtv
-
-gatunki_tfrtv <- gs_read(gs_title("gatunki_tfrtv_2005-2008"), ws = "gatunki_tfrtv")
-gatunki_tfrtv <- gatunki_tfrtv %>%
-  filter(`czy_gat_tfrtv?`=="tak")
-gatunki_tfrtv <- gatunki_tfrtv %>%
-  select(1,2) %>%
-  unique()
-bez_UKD_tfrtv <- sqldf("select *
-               from bn_ks a
-               where a.id not in 
-               (select b.id
-               from UKD_tfrtv b)
-               and a.id not in 
-               (select b.id
-               from bez_UKD_lit b)
-               and a.id not in 
-               (select b.id
-               from UKD_lit b)")
-
-gatunki_tfrtv_1 <- gatunki_tfrtv %>%
-  filter(pole=="X655") %>%
-  select(1)
-gatunki_tfrtv_2 <- gatunki_tfrtv %>%
-  filter(pole=="X650") %>%
-  select(1)
-
-bez_UKD_tfrtv_a <- sqldf("select *
-                          from bez_UKD_tfrtv a
-                          join gatunki_tfrtv_1 b on a.X655 like ('%'||b.gatunki||'%')")
-bez_UKD_tfrtv_b <- sqldf("select *
-                          from bez_UKD_tfrtv a
-                          join gatunki_tfrtv_2 b on a.X650 like ('%'||b.gatunki||'%')")
-
-bez_UKD_tfrtv <- sqldf("select *
-                      from bez_UKD_tfrtv a
-                      where a.id in (select a.id from bez_UKD_tfrtv_a a)
-                      or a.id in (select a.id from bez_UKD_tfrtv_b a)")
-bez_UKD_tfrtv <-bez_UKD_tfrtv[order(bez_UKD_tfrtv$X655,bez_UKD_tfrtv$X600),]
-
-#reszta
-reszta <- sqldf("select *
-               from bn_ks a
-               where a.id not in 
-               (select b.id
-               from UKD_lit b)
-               and a.id not in 
-               (select b.id
-               from bez_UKD_lit b)
-               and a.id not in 
-               (select b.id
-               from UKD_tfrtv b)
-               and a.id not in 
-               (select b.id
-               from bez_UKD_tfrtv b)")
-
-```
-
-```{r }
-#połączenie z bazą PBL
-#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
-#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
-jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
-PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
-
+```{r generowanie listy zapisow z osobami PBL}
 #wczytanie listy utożsamionych twórców z autorami BN
 pbl_viaf <- sheets_read(ss = "1cEz73dGN2r2-TTc702yne9tKfH9PQ6UyAJ2zBSV6Jb0") %>%
   filter(czy_ten_sam!="nie") %>%
-  select(pbl_id, bn_id = id, name) %>%
-  mutate(name = str_replace_all(name,"\\|\\(", " ("),
-         name = str_replace_all(name, "\\;\\|", "; ")) %>%
-  cSplit(.,"name",sep = "|",direction = "long") %>%
-  filter(name!="")
+  select(pbl_id, BN_id, BN_name) %>%
+  mutate(name = str_replace_all(BN_name,"\\|\\(", " ("),
+         name = str_replace_all(BN_name, "\\;\\|", "; ")) %>%
+  cSplit(.,"BN_name",sep = "|",direction = "long") %>%
+  filter(BN_name!="")
 
 #listy nazwisk BN ze zbioru
 #100
@@ -354,10 +206,165 @@ marc_field_700 <- marc_field_700 %>%
   mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
          name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
 #utożsamianie po nazewnictwie
-marc_fields <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
+bn_records_pbl_people <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
   unique() %>%
-  inner_join(.,pbl_viaf,by = "name") %>%
+  inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
   select(1:3)
+bn_records_pbl_people_id <- bn_records_pbl_people %>%
+  select(1) %>%
+  unique() %>%
+  mutate(osoba_pbl = "tak")
+bn_ks <- bn_ks %>%
+  full_join(.,bn_records_pbl_people_id,by = "id")
+```
+
+
+```{r gatunkowanie}
+#wczytanie wyselekcjonowanych gatunków literackich
+gatunki_lit <- sheets_read(ss = "1WwQGithbldJoF1JeoJiuCsF6FECPPFFYOi8IMXuHee8", sheet = "gatunki_literackie") %>%
+  filter(`czy_gat_literacki?`=="tak") %>%
+  select(1,2) %>%
+  unique()
+gatunki_lit_1 <- gatunki_lit %>%
+  filter(pole=="X655") %>%
+  select(1)
+gatunki_lit_2 <- gatunki_lit %>%
+  filter(pole=="X650") %>%
+  select(1)
+#filtrowanie po UKD literackim
+UKD_lit <- bn_ks %>%
+  mutate(ukd_lit = grepl("\\$a8", X080)) %>%
+  filter(ukd_lit == TRUE) %>%
+  select(-ukd_lit)
+#szukanie po wybranych gatunkach literackich
+UKD_lita <- sqldf("select *
+                          from UKD_lit a
+                          join gatunki_lit_1 b on a.X655 like ('%'||b.gatunki||'%')") %>%
+  select(-length(.)) %>%
+  unique()
+UKD_litb <- sqldf("select *
+                          from UKD_lit a
+                          join gatunki_lit_2 b on a.X650 like ('%'||b.gatunki||'%')") %>%
+  select(-length(.)) %>%
+  unique()
+UKD_lit <- sqldf("select *
+                      from UKD_lit a
+                      where a.id in (select a.id from UKD_lita a)
+                      or a.id in (select a.id from UKD_litb a)") %>%
+  arrange(X655,X650) %>%
+  filter(X380!="\\\\$aArtykuły|\\\\$Druki ulotne") %>%
+  filter(!grepl("\\$aNadbitki i odbitki",X655)) %>%
+  filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="")
+
+#wybór ksiązek, które nie mają UKD literackiego, ale mają gatunek literacki
+bez_UKD_lit <- sqldf("select *
+               from bn_ks a
+               where a.id not in 
+               (select b.id
+               from UKD_lit b)")
+
+bez_UKD_lit_a <- sqldf("select *
+                          from bez_UKD_lit a
+                          join gatunki_lit_1 b on a.X655 like ('%'||b.gatunki||'%')")
+bez_UKD_lit_b <- sqldf("select *
+                          from bez_UKD_lit a
+                          join gatunki_lit_2 b on a.X650 like ('%'||b.gatunki||'%')")
+
+bez_UKD_lit <- sqldf("select *
+                      from bez_UKD_lit a
+                      where a.id in (select a.id from bez_UKD_lit_a a)
+                      or a.id in (select a.id from bez_UKD_lit_b a)") %>%
+  arrange(X655,X650) %>%
+  filter(X380!="\\\\$aArtykuły|\\\\$Druki ulotne") %>%
+  filter(!grepl("\\$aNadbitki i odbitki",X655)) %>%
+  filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="")
+UKD_lit <- UKD_lit %>%
+  select(id) %>%
+  mutate(gatunkowanie = "UKD_lit")
+bez_UKD_lit <- bez_UKD_lit %>%
+  select(id) %>%
+  mutate(gatunkowanie = "gat_lit_bez_UKD_lit")
+
+#szukanie po gatunkach teatr, film, radio, telewizja
+UKD_tfrtv <- bn_ks %>%
+  mutate(ukd_tfrtv = grepl("\\$a7\\.01", X080)|grepl("\\$a7\\.03", X080)|grepl("\\$a7\\.03\\(438\\)\\(091\\)", X080)|grepl("\\$a7\\.07", X080)|grepl("\\$a7\\.096", X080)|grepl("\\$a7\\.097", X080)|grepl("\\$a79", X080)|grepl("\\$a791", X080)|grepl("\\$a791\\.4", X080)|grepl("\\$a792", X080)|grepl("\\$a792\\.071", X080)|grepl("\\$a792\\.09", X080)) %>%
+  filter(ukd_tfrtv == TRUE) %>%
+  select(-(length(bn_ks)+1))
+UKD_tfrtv <- sqldf("select *
+               from UKD_tfrtv a
+               where a.id not in 
+               (select b.id
+               from bez_UKD_lit b)
+               and a.id not in 
+               (select b.id
+               from UKD_lit b)")
+
+#wybór ksiązek, które nie mają UKD tfrtv, ale mają gatunek tfrtv
+gatunki_tfrtv <- sheets_read(ss = "1SU4dDultOtikO-7Yzv_hfIrgtQNv31sftUNxCTryr9Q", sheet = "gatunki_tfrtv") %>%
+  filter(`czy_gat_tfrtv?`=="tak") %>%
+  select(1,2) %>%
+  unique()
+bez_UKD_tfrtv <- sqldf("select *
+               from bn_ks a
+               where a.id not in 
+               (select b.id
+               from UKD_tfrtv b)
+               and a.id not in 
+               (select b.id
+               from bez_UKD_lit b)
+               and a.id not in 
+               (select b.id
+               from UKD_lit b)")
+
+gatunki_tfrtv_1 <- gatunki_tfrtv %>%
+  filter(pole=="X655") %>%
+  select(1)
+gatunki_tfrtv_2 <- gatunki_tfrtv %>%
+  filter(pole=="X650") %>%
+  select(1)
+
+bez_UKD_tfrtv_a <- sqldf("select *
+                          from bez_UKD_tfrtv a
+                          join gatunki_tfrtv_1 b on a.X655 like ('%'||b.gatunki||'%')")
+bez_UKD_tfrtv_b <- sqldf("select *
+                          from bez_UKD_tfrtv a
+                          join gatunki_tfrtv_2 b on a.X650 like ('%'||b.gatunki||'%')")
+
+bez_UKD_tfrtv <- sqldf("select *
+                      from bez_UKD_tfrtv a
+                      where a.id in (select a.id from bez_UKD_tfrtv_a a)
+                      or a.id in (select a.id from bez_UKD_tfrtv_b a)") %>%
+  arrange(X655,X650)
+
+UKD_tfrtv <- UKD_tfrtv %>%
+  select(id) %>%
+  mutate(gatunkowanie = "UKD_tfrtv")
+bez_UKD_tfrtv <- bez_UKD_tfrtv %>%
+  select(id) %>%
+  mutate(gatunkowanie = "gat_lit_bez_UKD_tfrtv")
+wszystkie_UKD <- rbind(UKD_lit,bez_UKD_lit,UKD_tfrtv,bez_UKD_tfrtv)
+bn_ks <- bn_ks %>%
+  full_join(.,wszystkie_UKD,by = "id")
+
+#reszta
+reszta <- sqldf("select *
+               from bn_ks a
+               where a.id not in 
+               (select b.id
+               from wszystkie_UKD b)
+               and a.id not in 
+               (select b.id
+               from bn_records_pbl_people_id b)")
+```
+
+```{r }
+#połączenie z bazą PBL
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
+
 
 
 ###TUTAJ###
