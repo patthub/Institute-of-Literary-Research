@@ -213,7 +213,7 @@ marc_field_700 <- marc_field_700 %>%
          name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
 #utożsamianie po nazewnictwie z informacją o dziale
 tworca_i_dzial <- dbGetQuery(PBL,
-                             "select tw.tw_tworca_id \"pbl_id\", dz.dz_dzial_id||'|'||dz.dz_nazwa \"dzial_id_name\"
+                             "select tw.tw_tworca_id \"pbl_id\", dz.dz_dzial_id||'|'||dz.dz_nazwa \"osoba_pbl_dzial_id_name\"
                               from pbl_tworcy tw
                               full join pbl_dzialy dz on dz.dz_dzial_id=tw.tw_dz_dzial_id")
 bn_records_pbl_people <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
@@ -222,7 +222,7 @@ bn_records_pbl_people <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
   select(1:3) %>%
   left_join(.,tworca_i_dzial,by = "pbl_id")
 bn_records_pbl_people_id <- bn_records_pbl_people %>%
-  select(id,dzial_id_name) %>%
+  select(id,osoba_pbl_dzial_id_name) %>%
   unique()
 bn_ks <- bn_ks %>%
   full_join(.,bn_records_pbl_people_id,by = "id")
@@ -380,7 +380,7 @@ bn_ks <- bn_ks %>%
   full_join(.,rekordy_slowa,by = "id")
 
 bn_ok <- bn_ks %>%
-  filter(!(is.na(osoba_pbl)&is.na(gatunkowanie)&is.na(dalsze_dziedziny)&is.na(slowa_literackie)))
+  filter(!(is.na(osoba_pbl_dzial_id_name)&is.na(gatunkowanie)&is.na(dalsze_dziedziny)&is.na(slowa_literackie)))
 
 #reszta rekordów, które nie będą zapimportowane
 reszta <- sqldf("select *
@@ -408,7 +408,13 @@ nie_poloniki <- bn_ok %>%
 
 bn_ok <- bn_ok %>%
   full_join(.,nie_poloniki,by = "id") %>%
-  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X830, rok, osoba_pbl, gatunkowanie, dalsze_dziedziny, slowa_literackie, czy_polonik)
+  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X830, rok, osoba_pbl_dzial_id_name, gatunkowanie, dalsze_dziedziny, slowa_literackie, czy_polonik)
+###TUTAJ### wskazanie nie poloników i usunięcie ze zbioru
+nie_poloniki <- bn_ok %>%
+  filter(czy_polonik=="nie") %>%
+  filter(is.na(osoba_pbl_dzial_id_name)|!(osoba_pbl_dzial_id_name %in% c("148|Hasła osobowe (literatura polska)","430|Hasła osobowe (Ludzie teatru i filmu)")))
+
+write.csv2(nie_poloniki, "C:/Users/Cezary/Desktop/do_usuniecia.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 test <- bn_ok %>%
   select(1,czy_polonik) %>%
