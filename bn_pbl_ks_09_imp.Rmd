@@ -211,21 +211,24 @@ marc_field_700 <- marc_field_700 %>%
   select(id,name) %>%
   mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
          name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
-#utożsamianie po nazewnictwie
+#utożsamianie po nazewnictwie z informacją o dziale
+tworca_i_dzial <- dbGetQuery(PBL,
+                             "select tw.tw_tworca_id \"pbl_id\", dz.dz_dzial_id||'|'||dz.dz_nazwa \"dzial_id_name\"
+                              from pbl_tworcy tw
+                              full join pbl_dzialy dz on dz.dz_dzial_id=tw.tw_dz_dzial_id")
 bn_records_pbl_people <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
   unique() %>%
   inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
-  select(1:3)
+  select(1:3) %>%
+  left_join(.,tworca_i_dzial,by = "pbl_id")
 bn_records_pbl_people_id <- bn_records_pbl_people %>%
-  select(1) %>%
-  unique() %>%
-  mutate(osoba_pbl = "tak")
+  select(id,dzial_id_name) %>%
+  unique()
 bn_ks <- bn_ks %>%
   full_join(.,bn_records_pbl_people_id,by = "id")
 ```
 
-
-```{r przygotowanie zbioru do importu}
+```{r dalsze przygotowanie zbioru do importu}
 #wczytanie wyselekcjonowanych gatunków literackich
 gatunki_lit <- sheets_read(ss = "1WwQGithbldJoF1JeoJiuCsF6FECPPFFYOi8IMXuHee8", sheet = "gatunki_literackie") %>%
   filter(`czy_gat_literacki?`=="tak") %>%
@@ -376,11 +379,6 @@ rekordy_slowa <- sqldf("select *
 bn_ks <- bn_ks %>%
   full_join(.,rekordy_slowa,by = "id")
 
-rekordy_slowa <- sqldf("select *
-                           from rekordy_slowa a
-                           where a.id not in (select b.id from rekordy_nazwiska b)
-                           and a.id not in (select b.id from rekordy_dziedziny b)")
-
 bn_ok <- bn_ks %>%
   filter(!(is.na(osoba_pbl)&is.na(gatunkowanie)&is.na(dalsze_dziedziny)&is.na(slowa_literackie)))
 
@@ -401,115 +399,22 @@ nie_poloniki <- bn_ok %>%
   filter(!grepl("pol",X500,ignore.case = TRUE)) %>%
   filter(!grepl("pol",X501,ignore.case = TRUE)) %>%
   filter(!grepl("pol",X546,ignore.case = TRUE)) %>%
-  select(id,X500,X501,X546)
-nie_poloniki$X500[1] <- "bla bla bla Mickiewicz bla bla bla"
+  select(id) %>%
+  mutate(czy_polonik = "nie") %>%
+  unique()
 
 #na postawie wystąpień twórców pbl w polach uwag
-#czy warto? co zrobić z case insensitivenes?
+#czy warto? co zrobić z case insensitivenes? --> za dużo śmieci wpada, zrezygnowałem z tego
 
-tworcy_pl <- dbGetQuery(PBL,
-                        "select distinct tw.tw_nazwisko
-                        from pbl_tworcy tw
-                        where tw.tw_dz_dzial_id in (148,430)")
-
-zapisy_tworcow_pl1 <- sqldf("select *
-                            from nie_poloniki a
-                            join tworcy_pl b on a.X500 like ('%'||b.TW_NAZWISKO||'%')")
-zapisy_tworcow_pl2 <- sqldf("select *
-                            from nie_poloniki a
-                            left join tworcy_pl b on a.X501 like ('%'||b.TW_NAZWISKO||'%')")
-zapisy_bez_tworcow_pl3 <- sqldf("select distinct a.id
-                            from nie_poloniki a
-                            left join tworcy_pl b on a.X546 not like ('%'||b.TW_NAZWISKO||'%')")
-
- %>%
-  select(id) %>%
-  mutate(czy_polonik = "nie")
-
-
-bn_ok <- bn_ks %>%
-  full_join(.,nie_poloniki,by = "id")
-
-
+bn_ok <- bn_ok %>%
+  full_join(.,nie_poloniki,by = "id") %>%
+  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X830, rok, osoba_pbl, gatunkowanie, dalsze_dziedziny, slowa_literackie, czy_polonik)
 
 test <- bn_ok %>%
-  filter(if (X501=="") !grepl("pl",substr(X008,16,18))) %>%
-  filter(!grepl("pol",substr(X008,36,38))) %>%
-  filter(!grepl("pol",X041)) %>%
-  filter(!grepl("pl",X044)) %>%
-  filter(!grepl("pol",X500)) %>%
-  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
+  select(1,czy_polonik) %>%
+  filter(!is.na(czy_polonik))
 
-test <- bn_ok %>%
-  mutate(kraj = substr(X008,16,18)) %>%
-  select(kraj) %>%
-  unique()
-
-###poszukać, czy fraza pol albo nazwiska z PBL gdzieś się pojawiają w uwagach###
-```
-
-```{r }
-
-
-
-
-
-###TUTAJ###
-
-
-
-#usunięcie zagranicznych zapisów, które nie są polonikami
-
-bn_ok <- rbind(UKD_lit %>% mutate(skad = "UKD_lit"),bez_UKD_lit %>% mutate(skad = "bez_UKD_lit"),UKD_tfrtv %>% mutate(skad = "UKD_tfrtv"),bez_UKD_tfrtv %>% mutate(skad = "bez_UKD_tfrtv"),rekordy_nazwiska %>% mutate(skad = "rekordy_nazwiska"),rekordy_dziedziny %>% mutate(skad = "rekordy_dziedziny"),rekordy_slowa %>% mutate(skad = "rekordy_slowa")) %>%
-  unique()
-
-#lista miejscowości
-
-to_be <- function(df, group) {
-  if(group)
-}
-
-test <- bn_ok %>%
-  if(X501=="") {
-    filter(!grepl("pl",substr(X008,16,18)));
-  } %>%
-  filter(!grepl("pol",substr(X008,36,38)))
-
-test <- bn_ok %>%
-  filter(if (X501=="") !grepl("pl",substr(X008,16,18))) %>%
-  filter(!grepl("pol",substr(X008,36,38))) %>%
-  filter(!grepl("pol",X041)) %>%
-  filter(!grepl("pl",X044)) %>%
-  filter(!grepl("pol",X500)) %>%
-  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
-
-test <- bn_ok %>%
-  mutate(kraj = substr(X008,16,18)) %>%
-  select(kraj) %>%
-  unique()
-
-###poszukać, czy fraza pol albo nazwiska z PBL gdzieś się pojawiają w uwagach###
-
-
-
-BN_PBL_wydawnictwa <- merge( x = wydaw_3, y = PBL_wydawnictwa, by = 'nazwa_prosta', sort = FALSE, all.x = TRUE, allow.cartesian = TRUE)
-BN_PBL_wydawnictwa$to_samo <- BN_PBL_wydawnictwa$wydawnictwo==BN_PBL_wydawnictwa$WY_NAZWA
-BN_PBL_wydawnictwa <- BN_PBL_wydawnictwa[order(as.integer(as.character(BN_PBL_wydawnictwa$licznik)), -BN_PBL_wydawnictwa$to_samo, -BN_PBL_wydawnictwa$WY_LICZBA_ZAPISOW),]
-
-BN_PBL_wydawnictwa %$%  
-    { as.integer(licznik) == dplyr::lag(as.integer(licznik), 1) & nazwa_prosta==lag(nazwa_prosta)} %>% 
-    as.numeric() %>% 
-    {.} -> BN_PBL_wydawnictwa$same
-BN_PBL_wydawnictwa$same[1] <- 0
-
-BN_PBL_wydawnictwa <- BN_PBL_wydawnictwa %>%
-  filter(same==0)
-
-wy_wydawnictwo_id <- BN_PBL_wydawnictwa %>%
-  select(licznik, WY_WYDAWNICTWO_ID)
-
-wy_wydawnictwo_id <- wy_wydawnictwo_id[order(as.integer(as.character(wy_wydawnictwo_id$licznik))),]
-
+###usunąć te rekordy, które nie są polonikami; zrobić to używając działów (zostaje 148 i 430)
 
 ```
 
