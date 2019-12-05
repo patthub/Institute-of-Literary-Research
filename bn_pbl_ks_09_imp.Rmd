@@ -15,6 +15,12 @@ bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8
 #bn_ks <- read.csv2("C:/Users/Cezary/Desktop/bn_data_2004-2008.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 #bn_ks <- read.csv2("C:/Users/User/Desktop/bn_data_2004-2008.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 
+#połączenie z bazą PBL
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
 ```
 
 ```{r tworzenie listy gatunków literackich - jednorazowo(?)}
@@ -219,7 +225,7 @@ bn_ks <- bn_ks %>%
 ```
 
 
-```{r gatunkowanie}
+```{r przygotowanie zbioru do importu}
 #wczytanie wyselekcjonowanych gatunków literackich
 gatunki_lit <- sheets_read(ss = "1WwQGithbldJoF1JeoJiuCsF6FECPPFFYOi8IMXuHee8", sheet = "gatunki_literackie") %>%
   filter(`czy_gat_literacki?`=="tak") %>%
@@ -346,61 +352,111 @@ wszystkie_UKD <- rbind(UKD_lit,bez_UKD_lit,UKD_tfrtv,bez_UKD_tfrtv)
 bn_ks <- bn_ks %>%
   full_join(.,wszystkie_UKD,by = "id")
 
-#reszta
+#dziedziny drugorzędne dla PBL
+rekordy_dziedziny <- bn_ks %>%
+  mutate(czy = grepl("\\$a002\\/003", X080)|grepl("\\$a01\\/02\\+050\\+070", X080)|grepl("\\$a06)", X080)|grepl("\\$a1", X080)|grepl("\\$a2", X080)|grepl("\\$a3016\\.7", X080)|grepl("\\$a37\\.091", X080)|grepl("\\$a378", X080)|grepl("\\$a39", X080)|grepl("\\$a929", X080)|grepl("\\$a94\\(438\\)\\:\\:008", X080))  %>%
+  filter(czy==TRUE) %>%
+  select(id) %>%
+  mutate(dalsze_dziedziny = "tak") %>%
+  unique()
+bn_ks <- bn_ks %>%
+  full_join(.,rekordy_dziedziny,by = "id")
+#słowa literackie w polu 245
+rekordy_slowa <- sqldf("select *
+                    from bn_ks a
+                    where LOWER(a.X245) like ('%'||'pisar'||'%')
+                   or LOWER(a.X245) like ('%'||'literat'||'%')
+                   or LOWER(a.X245) like ('%'||'literac'||'%')
+                   or LOWER(a.X245) like ('%'||'teatr'||'%')
+                   or LOWER(a.X245) like ('%'||'film'||'%')
+                   or LOWER(a.X245) like ('%'||'dramat'||'%')") %>%
+  select(id) %>%
+  mutate(slowa_literackie = "tak") %>%
+  unique()
+bn_ks <- bn_ks %>%
+  full_join(.,rekordy_slowa,by = "id")
+
+rekordy_slowa <- sqldf("select *
+                           from rekordy_slowa a
+                           where a.id not in (select b.id from rekordy_nazwiska b)
+                           and a.id not in (select b.id from rekordy_dziedziny b)")
+
+bn_ok <- bn_ks %>%
+  filter(!(is.na(osoba_pbl)&is.na(gatunkowanie)&is.na(dalsze_dziedziny)&is.na(slowa_literackie)))
+
+#reszta rekordów, które nie będą zapimportowane
 reszta <- sqldf("select *
                from bn_ks a
                where a.id not in 
                (select b.id
-               from wszystkie_UKD b)
-               and a.id not in 
-               (select b.id
-               from bn_records_pbl_people_id b)")
+               from bn_ok b)")
+
+#usunięcie zagranicznych zapisów, które nie są polonikami 
+#na podstawie braku wystąpień frazy "pol" w polach MARC
+nie_poloniki <- bn_ok %>%
+  filter(if (X501=="") !grepl("pl",substr(X008,16,18))) %>%
+  filter(!grepl("pol",substr(X008,36,38))) %>%
+  filter(!grepl("pol",X041)) %>%
+  filter(!grepl("pl",X044)) %>%
+  filter(!grepl("pol",X500,ignore.case = TRUE)) %>%
+  filter(!grepl("pol",X501,ignore.case = TRUE)) %>%
+  filter(!grepl("pol",X546,ignore.case = TRUE)) %>%
+  select(id,X500,X501,X546)
+nie_poloniki$X500[1] <- "bla bla bla Mickiewicz bla bla bla"
+
+#na postawie wystąpień twórców pbl w polach uwag
+#czy warto? co zrobić z case insensitivenes?
+
+tworcy_pl <- dbGetQuery(PBL,
+                        "select distinct tw.tw_nazwisko
+                        from pbl_tworcy tw
+                        where tw.tw_dz_dzial_id in (148,430)")
+
+zapisy_tworcow_pl1 <- sqldf("select *
+                            from nie_poloniki a
+                            join tworcy_pl b on a.X500 like ('%'||b.TW_NAZWISKO||'%')")
+zapisy_tworcow_pl2 <- sqldf("select *
+                            from nie_poloniki a
+                            left join tworcy_pl b on a.X501 like ('%'||b.TW_NAZWISKO||'%')")
+zapisy_bez_tworcow_pl3 <- sqldf("select distinct a.id
+                            from nie_poloniki a
+                            left join tworcy_pl b on a.X546 not like ('%'||b.TW_NAZWISKO||'%')")
+
+ %>%
+  select(id) %>%
+  mutate(czy_polonik = "nie")
+
+
+bn_ok <- bn_ks %>%
+  full_join(.,nie_poloniki,by = "id")
+
+
+
+test <- bn_ok %>%
+  filter(if (X501=="") !grepl("pl",substr(X008,16,18))) %>%
+  filter(!grepl("pol",substr(X008,36,38))) %>%
+  filter(!grepl("pol",X041)) %>%
+  filter(!grepl("pl",X044)) %>%
+  filter(!grepl("pol",X500)) %>%
+  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X490, X500, X501, X500, X546, X600, X650, X655, X700, rok)
+
+test <- bn_ok %>%
+  mutate(kraj = substr(X008,16,18)) %>%
+  select(kraj) %>%
+  unique()
+
+###poszukać, czy fraza pol albo nazwiska z PBL gdzieś się pojawiają w uwagach###
 ```
 
 ```{r }
-#połączenie z bazą PBL
-#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
-#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
-jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
-PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
 
 
 
 
 ###TUTAJ###
 
-rekordy_nazwiska <- sqldf("select *
-                    from reszta a
-                    where a.id in (select b.id from name_match b)")
 
-rekordy_dziedziny <- reszta %>%
-  mutate(czy = grepl("\\$a002\\/003", X080)|grepl("\\$a01\\/02\\+050\\+070", X080)|grepl("\\$a06)", X080)|grepl("\\$a1", X080)|grepl("\\$a2", X080)|grepl("\\$a3016\\.7", X080)|grepl("\\$a37\\.091", X080)|grepl("\\$a378", X080)|grepl("\\$a39", X080)|grepl("\\$a929", X080)|grepl("\\$a94\\(438\\)\\:\\:008", X080))  %>%
-  filter(czy==TRUE) %>%
-  select(-czy) %>%
-  unique()
-
-rekordy_dziedziny <- sqldf("select *
-                           from rekordy_dziedziny a
-                           where a.id not in (select b.id from rekordy_nazwiska b)")
-
-rekordy_slowa <- sqldf("select *
-                    from reszta a
-                    where LOWER(a.X245) like ('%'||'pisar'||'%')
-                   or LOWER(a.X245) like ('%'||'literat'||'%')
-                   or LOWER(a.X245) like ('%'||'literac'||'%')
-                   or LOWER(a.X245) like ('%'||'teatr'||'%')
-                   or LOWER(a.X245) like ('%'||'film'||'%')
-                   or LOWER(a.X245) like ('%'||'dramat'||'%')")
-rekordy_slowa <- sqldf("select *
-                           from rekordy_slowa a
-                           where a.id not in (select b.id from rekordy_nazwiska b)
-                           and a.id not in (select b.id from rekordy_dziedziny b)")
-
-reszta <- sqldf("select *
-                from reszta a
-                where a.id not in (select b.id from rekordy_nazwiska b)
-                and a.id not in (select b.id from rekordy_dziedziny b)
-                and a.id not in (select b.id from rekordy_slowa b)")
 
 #usunięcie zagranicznych zapisów, które nie są polonikami
 
