@@ -10,7 +10,10 @@ options(scipen = 999)
 pacman::p_load(utf8,googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC)
 
 #wgranie zbiorów książek
-bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
+bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) %>%
+  filter(!grepl("\\\\$aArtykuły|\\\\$Druki ulotne",X380)) %>%
+  filter(!grepl("\\$aNadbitki i odbitki",X655)) %>%
+  filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="")
 #bn_ks <- read.csv2("C:/Users/cezar/Desktop/bn_ks.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) 
 #bn_ks <- read.csv2("C:/Users/Cezary/Desktop/bn_data_2004-2008.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 #bn_ks <- read.csv2("C:/Users/User/Desktop/bn_data_2004-2008.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
@@ -260,10 +263,7 @@ UKD_lit <- sqldf("select *
                       from UKD_lit a
                       where a.id in (select a.id from UKD_lita a)
                       or a.id in (select a.id from UKD_litb a)") %>%
-  arrange(X655,X650) %>%
-  filter(X380!="\\\\$aArtykuły|\\\\$Druki ulotne") %>%
-  filter(!grepl("\\$aNadbitki i odbitki",X655)) %>%
-  filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="")
+  arrange(X655,X650)
 
 #wybór ksiązek, które nie mają UKD literackiego, ale mają gatunek literacki
 bez_UKD_lit <- sqldf("select *
@@ -283,10 +283,7 @@ bez_UKD_lit <- sqldf("select *
                       from bez_UKD_lit a
                       where a.id in (select a.id from bez_UKD_lit_a a)
                       or a.id in (select a.id from bez_UKD_lit_b a)") %>%
-  arrange(X655,X650) %>%
-  filter(X380!="\\\\$aArtykuły|\\\\$Druki ulotne") %>%
-  filter(!grepl("\\$aNadbitki i odbitki",X655)) %>%
-  filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="")
+  arrange(X655,X650)
 UKD_lit <- UKD_lit %>%
   select(id) %>%
   mutate(gatunkowanie = "UKD_lit")
@@ -298,7 +295,7 @@ bez_UKD_lit <- bez_UKD_lit %>%
 UKD_tfrtv <- bn_ks %>%
   mutate(ukd_tfrtv = grepl("\\$a7\\.01", X080)|grepl("\\$a7\\.03", X080)|grepl("\\$a7\\.03\\(438\\)\\(091\\)", X080)|grepl("\\$a7\\.07", X080)|grepl("\\$a7\\.096", X080)|grepl("\\$a7\\.097", X080)|grepl("\\$a79", X080)|grepl("\\$a791", X080)|grepl("\\$a791\\.4", X080)|grepl("\\$a792", X080)|grepl("\\$a792\\.071", X080)|grepl("\\$a792\\.09", X080)) %>%
   filter(ukd_tfrtv == TRUE) %>%
-  select(-(length(bn_ks)+1))
+  select(-length(.))
 UKD_tfrtv <- sqldf("select *
                from UKD_tfrtv a
                where a.id not in 
@@ -408,67 +405,53 @@ nie_poloniki <- bn_ok %>%
 
 bn_ok <- bn_ok %>%
   full_join(.,nie_poloniki,by = "id") %>%
-  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X830, rok, osoba_pbl_dzial_id_name, gatunkowanie, dalsze_dziedziny, slowa_literackie, czy_polonik)
-###TUTAJ### wskazanie nie poloników i usunięcie ze zbioru
+  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X830, rok, osoba_pbl_dzial_id_name, gatunkowanie, dalsze_dziedziny, slowa_literackie, czy_polonik) %>%
+  unique()
+#wskazanie niepoloników i usunięcie ze zbioru
 nie_poloniki <- bn_ok %>%
   filter(czy_polonik=="nie") %>%
   filter(is.na(osoba_pbl_dzial_id_name)|!(osoba_pbl_dzial_id_name %in% c("148|Hasła osobowe (literatura polska)","430|Hasła osobowe (Ludzie teatru i filmu)")))
-
-write.csv2(nie_poloniki, "C:/Users/Cezary/Desktop/do_usuniecia.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+bn_ok <- sqldf("select *
+               from bn_ok a
+               where a.id not in (select b.id from nie_poloniki b)")
 
 test <- bn_ok %>%
-  select(1,czy_polonik) %>%
-  filter(!is.na(czy_polonik))
-
-###usunąć te rekordy, które nie są polonikami; zrobić to używając działów (zostaje 148 i 430)
-
+  select(X380) %>%
+  unique()
 ```
 
 ```{r aktualizowanie zbiorow po selekcji}
-
-wszystkie <- rbind(UKD_lit_small,bez_UKD_lit_small)
-options(scipen = 999)
-ukd_lit_google <- gs_read(gs_title("2005-2008_UKD_lit"), ws = "2005-2008_UKD_lit")
-bez_ukd_lit_google <- gs_read(gs_title("2005-2008_bez_UKD_lit"), ws = "2005-2008_bez_UKD_lit")
-wszystkie_google <- rbind(ukd_lit_google,bez_ukd_lit_google)
-
-wszystkie[wszystkie==""] <- NA
-wszystkie_google[wszystkie_google==""] <- NA
-
-wszystkie <- mutate(wszystkie,
-                    porownanie = paste(wszystkie$X100,wszystkie$X245,wszystkie$X650,wszystkie$X655,wszystkie$X080,wszystkie$X260, sep = "|"))
-
-wszystkie_google <- mutate(wszystkie_google,
-                    porownanie = paste(wszystkie_google$X100,wszystkie_google$X245,wszystkie_google$X650,wszystkie_google$X655,wszystkie_google$X080,wszystkie_google$X260, sep = "|"))
-
-wszystkie <- merge(x=wszystkie,y=wszystkie_google,by = "porownanie",all.x = TRUE)
-wszystkie <- wszystkie %>%
-  select(2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,22) %>%
+bn_ok <- bn_ok %>%
+  mutate(czy_ma_ukd = ifelse(X080=="","nie","tak"),
+         position_dash = ifelse(grepl("\\\\\\\\\\$a821\\.",X080),str_locate(X080,"\\-")[,1], NA),
+         position_dash = ifelse(is.na(position_dash),"",as.integer(position_dash)),
+         position_091 = str_locate(X080,"\\(091\\)")[,1],
+         position_091 = ifelse(is.na(position_091),"",as.integer(position_091)),
+         rodzaj_ksiazki = ifelse(grepl("Antologi",X655),"antologia",
+                        ifelse(position_091!=""&position_dash!="",
+                          ifelse(as.integer(position_091)<as.integer(position_dash), "przedmiotowa", "podmiotowa"),
+                          ifelse(position_dash!="","podmiotowa","przedmiotowa"))),
+         rodzaj_ksiazki = ifelse(czy_ma_ukd=="nie","",as.character(rodzaj_ksiazki)))
+gatunki_podmiotowe <- bn_ok %>%
+  filter(rodzaj_ksiazki=="podmiotowa") %>%
+  select(X655) %>%
   unique() %>%
-  filter(is.na(X380.x)|grepl("Ksi??k",X380.x))
+  cSplit(.,"X655",sep = "|",direction = "long") %>%
+  unique() %>%
+  filter(str_detect(X655,"\\$y[\\d-]+ w\\."))
+###TUTAJ###
+###coś tu nie gra, grepl nie działa
+gatunki_podmiotowe <- str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2")
+bn_ok$czy_podmiotowy <- grepl(gatunki_podmiotowe,bn_ok$X655)
+test2 <- grepl(test,bn_ok$X655)
+grepl("instance|percentage", Text)
+gatunki_bez_ukd <- sqldf("select a.id
+                         from bn_ok a
+                         inner join gatunki_podmiotowe b on a.X655 like ('%'||'b.X655'||'%')")
 
-test <- ddply(wszystkie, .(X041.x,X080.x,X100.x,X245.x,X246.x,X250.x,X260.x,X300.x,X380.x,X490.x,X500.x,X501.x,X546.x,X600.x,X650.x,X655.x,X700.x,rok.x,czy_idzie_do_PBL), summarize, content = paste(id.x, collapse="|"))
-wszystkie <- mutate(test,
-                    id = str_replace(test$content,"(.*?)(\\|)(.*)","\\1"))
-wszystkie <- wszystkie %>%
-  select(id,czy_idzie_do_PBL)
+count <- as.data.frame(table(test$rodzaj_ksiazki))
 
-wszystkie_full <- rbind(UKD_lit,bez_UKD_lit)
-UKD <- wszystkie_full %>%
-  filter(X080!="") %>%
-  filter(X380==""|grepl("Ksi??k",X380))
-bez_UKD <- wszystkie_full %>%
-  filter(X080=="") %>%
-  filter(X380==""|grepl("Ksi??k",X380))
-
-UKD <- mutate(UKD,
-              ukd = str_replace(UKD$X080,"(.*?)(\\\\\\\\\\$a821\\..*?)(\\||$)","\\2"))
-UKD <- mutate(UKD,
-               position_dash = ifelse(grepl("\\\\\\\\\\$a821\\.",UKD$ukd),str_locate(UKD$ukd,"\\-")[,1], NA),
-               position_091 = str_locate(UKD$ukd,"\\(091\\)")[,1])
-UKD$position_dash[is.na(UKD$position_dash)] <- ""
-UKD$position_091[is.na(UKD$position_091)] <- ""
-UKD$rodzaj <- ifelse(grepl("Antologi",UKD$X655),"antologia", ifelse(UKD$position_091!=""&UKD$position_dash!="",ifelse(as.integer(UKD$position_091)<as.integer(UKD$position_dash), "przedmiotowa", "podmiotowa"),ifelse(UKD$position_dash!="","podmiotowa","przedmiotowa")))
+###TUTAJ###
 UKD <- UKD %>%
   select(id,X655, rodzaj, X080, X245,X100)
 UKD <- merge(x=UKD,y=wszystkie,by = "id",all.x = TRUE)
