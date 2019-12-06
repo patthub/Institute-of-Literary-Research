@@ -86,7 +86,7 @@ case2 <- lista_ksiazek %>%
   unique()
 
 
-########################
+###automatyczny przypisanie redaktorom na podstawie wcześniejszych importów###
 zapisy <- RJDBC::dbGetQuery(PBL,
                             "select z.za_zapis_id, z.za_status_imp, z.za_uwagi
                             from pbl_zapisy z

@@ -177,49 +177,52 @@ marc_field_600 <- marc_field_600 %>%
   select(id,name) %>%
   mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
          name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
-#700
-marc_field_700 <- bn_ks %>%
-  select(id,X700)%>%
-  filter(X700!="") %>%
-  mutate(X700=str_replace_all(X700,"(^|\\|)","~\\1")) %>%
-  cSplit(.,"X700",sep = "~",direction = "long") %>%
-  filter(X700!="") %>%
-  mutate(X700=str_remove_all(X700,"^\\|")) %>%
-  mutate(indicator = str_replace_all(X700,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(bn_ks$X700,"\\$.")
-subfield_list<- unique(unlist(subfield_list))
-empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_700)[1]))
-colnames(empty_table) <-subfield_list
-marc_field_700<-cbind(marc_field_700,empty_table)
-subfield_list_char <- paste("(",subfield_list,")",sep = "")
-subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
-x <- 1:length(subfield_list)
+#Czy jest sens szukać twórców PBL w współtwórcach BN?
+##700
+#marc_field_700 <- bn_ks %>%
+#  select(id,X700)%>%
+#  filter(X700!="") %>%
+#  mutate(X700=str_replace_all(X700,"(^|\\|)","~\\1")) %>%
+#  cSplit(.,"X700",sep = "~",direction = "long") %>%
+#  filter(X700!="") %>%
+#  mutate(X700=str_remove_all(X700,"^\\|")) %>%
+#  mutate(indicator = str_replace_all(X700,"(^.*?)(\\$.*)","\\1"))
+#subfield_list<- str_extract_all(bn_ks$X700,"\\$.")
+#subfield_list<- unique(unlist(subfield_list))
+#empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_700)[1]))
+#colnames(empty_table) <-subfield_list
+#marc_field_700<-cbind(marc_field_700,empty_table)
+#subfield_list_char <- paste("(",subfield_list,")",sep = "")
+#subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+#x <- 1:length(subfield_list)
+#
+#for (i in x) {
+#  progress(match(i,x), max.value = length(x)) 
+#  marc_field_700$X700 <- str_replace(marc_field_700$X700,subfield_list_char[i],"|\\1")
+#}
+#for (i in x) {
+#  progress(match(i,x), max.value = length(x)) 
+#  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+#  string_a <- "(^)(.*?\\|"
+#  string_b <- subfield_list_char2[i]
+#  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+#  string <- paste(string_a,string_b,string_c,sep = "")
+#  marc_field_700[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_700$X700),str_replace_all(gsub(string,"\\3",marc_field_700$X700),"\\${2}.", "~"),NA)
+#}
+#marc_field_700 <- marc_field_700 %>%
+#  select(id,`$a`,`$d`,`$c`) %>%
+#  mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
+#  select(id,name) %>%
+#  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
+#         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
 
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  marc_field_700$X700 <- str_replace(marc_field_700$X700,subfield_list_char[i],"|\\1")
-}
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-  string_a <- "(^)(.*?\\|"
-  string_b <- subfield_list_char2[i]
-  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-  string <- paste(string_a,string_b,string_c,sep = "")
-  marc_field_700[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_700$X700),str_replace_all(gsub(string,"\\3",marc_field_700$X700),"\\${2}.", "~"),NA)
-}
-marc_field_700 <- marc_field_700 %>%
-  select(id,`$a`,`$d`,`$c`) %>%
-  mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
-  select(id,name) %>%
-  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
-         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
 #utożsamianie po nazewnictwie z informacją o dziale
 tworca_i_dzial <- dbGetQuery(PBL,
                              "select tw.tw_tworca_id \"pbl_id\", dz.dz_dzial_id||'|'||dz.dz_nazwa \"osoba_pbl_dzial_id_name\"
                               from pbl_tworcy tw
                               full join pbl_dzialy dz on dz.dz_dzial_id=tw.tw_dz_dzial_id")
-bn_records_pbl_people <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
+#bn_records_pbl_people <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
+bn_records_pbl_people <- rbind(marc_field_100,marc_field_600) %>%
   unique() %>%
   inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
   select(1:3) %>%
@@ -415,12 +418,123 @@ bn_ok <- sqldf("select *
                from bn_ok a
                where a.id not in (select b.id from nie_poloniki b)")
 
-test <- bn_ok %>%
-  select(X380) %>%
-  unique()
 ```
 
-```{r aktualizowanie zbiorow po selekcji}
+```{r automatyczne usunięcie INO na podstawie wcześniejszych importów}
+#pobranie starych list książek z importu
+listy_2005 <- sheets_read(ss = "1HkWkX61sQWktSXf0v0uPV8j2DwuTocesyCJuKTdisIU", sheet = "lista_ksiazek")
+listy_2006 <- sheets_read(ss = "1zeMx_Idsum8JmlM6G7Eufx9LxloHoAHv8V-My71VZf4", sheet = "lista_ksiazek")
+listy_2007 <- sheets_read(ss = "19iL7YoD8ug-rLnpzS6FD46aS2J1BRf4qL5VxllywCGE", sheet = "lista_ksiazek")
+listy_2008 <- sheets_read(ss = "1RshTeWdXBE7OzOEfoGpL9Ljb_GXDlGDePNjV1HKmuOo", sheet = "lista_ksiazek")
+listy_2004 <- sheets_read(ss = "1RmDia97s4B8F74sS7Wbpnv_A9zMfr4xTvcD9leukAfM", sheet = "lista_książek") %>%
+  mutate(typ_ksiazki = NA, link = NA, link_1 = NA, status = NA, blad_w_imporcie_tytulu = NA) %>%
+  select(pracownik,ZA_ZAPIS_ID,typ_ksiazki, link, link_1, rok, status, blad_w_imporcie_tytulu, X100, X245, X650, X655, X246, X250, X260, X300, X380, X490, X500, X501, X546, X600, X700, X041, X080)
+#ujednolicenie 2004 do wzoru późniejszych rocznikóW
+do2004 <- RJDBC::dbGetQuery(PBL,
+                            "select z.za_zapis_id, z.za_status_imp
+                            from pbl_zapisy z
+                            where z.za_uwagi like '%import%02%'")
+listy_2004 <- merge(listy_2004,do2004,by = "ZA_ZAPIS_ID",all.x = TRUE) %>%
+  mutate(status = ZA_STATUS_IMP) %>%
+  select(-ZA_STATUS_IMP) %>%
+  select(pracownik,ZA_ZAPIS_ID,typ_ksiazki, link, link_1, rok, status, blad_w_imporcie_tytulu, X100, X245, X650, X655, X246, X250, X260, X300, X380, X490, X500, X501, X546, X600, X700, X041, X080)
+#zapewnienie tych samych nazw kolumn
+colnames(listy_2005) <- names(listy_2004)
+colnames(listy_2006) <- names(listy_2004)
+colnames(listy_2007) <- names(listy_2004)
+colnames(listy_2008) <- names(listy_2004)
+listy_2004 <- listy_2004 %>%
+  mutate(X655 = str_remove(str_replace_all(X655,"(\\$a)","|\\1"),"^\\|"),
+         X650 = str_remove(str_replace_all(X650,"(\\$a)","|\\1"),"^\\|"))
+
+#wyznaczenie listy 650 i 655 do automatycznego INO na podstawie wcześniejszych importów
+#a gdyby tylko dawać jeden element? 655 np.?
+#co zrobić z tymi INO, które wystąpiły tylko raz?
+zapisy <- RJDBC::dbGetQuery(PBL,
+                            "select z.za_zapis_id, z.za_status_imp, z.za_uwagi
+                            from pbl_zapisy z
+                            where z.za_uwagi like '%import%'") %>%
+  mutate(pracownik_pbl = str_extract(ZA_UWAGI, "(?<=akceptuje:)([A-Z]*)")) %>%
+  select(ZA_ZAPIS_ID,pracownik_pbl,ZA_STATUS_IMP)
+
+do_importu_NIE <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008) %>%
+  full_join(.,zapisy,by = "ZA_ZAPIS_ID") %>%
+  select(X650,X655,ZA_STATUS_IMP) %>%
+  mutate(X650 = str_remove_all(X650,"\\\\7"),
+         X655 = str_remove_all(X655,"\\\\7"),
+         joint = paste(X650,X655,sep = "~")) %>%
+  select(ZA_STATUS_IMP,joint) %>%
+  group_by(joint) %>%
+  mutate(grupa = paste(ZA_STATUS_IMP,collapse = ",")) %>%
+  ungroup() %>%
+  select(joint, grupa) %>%
+  unique() %>%
+  mutate(ile = str_count(grupa,",")+1) %>%
+  filter(grepl("INO",grupa)) %>%
+  filter(!grepl("IOK|IMP|IPN|IPC",grupa)) %>%
+#tu się musi KP wypowiedzieć, czy jak było 2xNIE to wystarczy, żeby wywalać
+  filter(ile > 1) %>%
+  select(joint) %>%
+  mutate(joint = str_remove_all(str_replace_all(joint,"(\\$a)","\\\\#7\\1"),"#")) %>%
+  mutate(do_wyrzucenia = "tak")
+
+bn_ok <- bn_ok %>%
+  mutate(X650 = ifelse(X650=="",NA,as.character(X650)),
+         X655 = ifelse(X655=="",NA,as.character(X655)),
+         joint = paste(X650,X655,sep = "~")) %>%
+  full_join(.,do_importu_NIE,by = "joint") %>%
+  mutate(X650 = ifelse(is.na(X650),"",as.character(X650)),
+         X655 = ifelse(is.na(X655),"",as.character(X655)))
+
+reszta2 <- bn_ok %>%
+  filter(do_wyrzucenia=="tak")
+bn_ok <- bn_ok %>%
+  filter(is.na(do_wyrzucenia)) %>%
+  select(-do_wyrzucenia,-joint)
+#czy próbować wyrzucać po UKD, które dostawało tylko INO?
+#do_importu_NIE2 <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008) %>%
+#  full_join(.,zapisy,by = "ZA_ZAPIS_ID") %>%
+#  select(X080,ZA_STATUS_IMP) %>%
+#  mutate(X080 = str_remove_all(X080,"\\\\")) %>%
+#  select(ZA_STATUS_IMP,X080) %>%
+#  group_by(X080) %>%
+#  mutate(grupa = paste(ZA_STATUS_IMP,collapse = ",")) %>%
+#  ungroup() %>%
+#  select(X080, grupa) %>%
+#  unique() %>%
+#  mutate(ile = str_count(grupa,",")+1) %>%
+#  filter(grepl("INO",grupa)) %>%
+#  filter(!grepl("IOK|IMP|IPN|IPC",grupa)) %>%
+##tu się musi KP wypowiedzieć, czy jak było 2xNIE to wystarczy, żeby wywalać
+#  filter(ile > 1) %>%
+#  select(X080) %>%
+#  mutate(X080 = str_remove_all(str_replace_all(X080,"(\\$a)","\\\\#\\1"),"#")) %>%
+#  mutate(do_wyrzucenia = "tak")
+#
+#bn_ok <- bn_ok %>%
+#  full_join(.,do_importu_NIE2,by = "X080")
+#
+#reszta3 <- bn_ok %>%
+#  filter(do_wyrzucenia=="tak")
+#bn_ok <- bn_ok %>%
+#  filter(is.na(do_wyrzucenia)) %>%
+#  select(-do_wyrzucenia)
+
+out <- sheets_read(ss = "1lO_ZtwyBDePGqXkgWyk_WmGeQBaAQBvEUjNnctrw-vg") %>%
+  filter(wchodzi_do_pbl == "nie")
+
+test <- bn_ok %>%
+  select(id,X650,X655) %>%
+  filter(grepl("Wydawnictwa popularne",X655)) %>%
+  unique() %>%
+  full_join(.,out,by = "X650") %>%
+  filter(wchodzi_do_pbl=="nie") %>%
+  filter(!is.na(X655))
+
+```
+
+
+```{r przypisanie książce rodzaju (podmiotowa, przedmiotowa, antologie, współwydanie)}
 bn_ok <- bn_ok %>%
   mutate(czy_ma_ukd = ifelse(X080=="","nie","tak"),
          position_dash = ifelse(grepl("\\\\\\\\\\$a821\\.",X080),str_locate(X080,"\\-")[,1], NA),
@@ -439,17 +553,21 @@ gatunki_podmiotowe <- bn_ok %>%
   cSplit(.,"X655",sep = "|",direction = "long") %>%
   unique() %>%
   filter(str_detect(X655,"\\$y[\\d-]+ w\\."))
-###TUTAJ###
-###coś tu nie gra, grepl nie działa
-gatunki_podmiotowe <- str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2")
+gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
 bn_ok$czy_podmiotowy <- grepl(gatunki_podmiotowe,bn_ok$X655)
-test2 <- grepl(test,bn_ok$X655)
-grepl("instance|percentage", Text)
-gatunki_bez_ukd <- sqldf("select a.id
-                         from bn_ok a
-                         inner join gatunki_podmiotowe b on a.X655 like ('%'||'b.X655'||'%')")
+bn_ok <- bn_ok %>%
+  mutate(rodzaj_ksiazki = ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE,"podmiotowa",
+                                 ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki))))
 
-count <- as.data.frame(table(test$rodzaj_ksiazki))
+test <- bn_ok %>%
+  filter(rodzaj_ksiazki=="przedmiotowa") %>%
+  select(id,X245,X650,X655) %>%
+  unique()
+write.csv2(test, "C:/Users/Cezary/Desktop/test.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+
+###TUTAJ###
+
+count <- as.data.frame(table(bn_ok$rodzaj_ksiazki))
 
 ###TUTAJ###
 UKD <- UKD %>%
