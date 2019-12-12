@@ -223,9 +223,14 @@ bn_records_pbl_people <- rbind(marc_field_100,marc_field_600) %>%
   left_join(.,tworca_i_dzial,by = "pbl_id")
 bn_records_pbl_people_id <- bn_records_pbl_people %>%
   select(id,osoba_pbl_dzial_id_name) %>%
+  group_by(id) %>%
+  mutate(osoba_pbl_dzial_id_name = paste(unique(osoba_pbl_dzial_id_name),collapse = "~")) %>%
+  ungroup() %>%
   unique()
 bn_ks <- bn_ks %>%
   full_join(.,bn_records_pbl_people_id,by = "id")
+
+###sprawdzić czy nie ma zdublowanego mapowania BN->PBL (czy np. jedna osoba z BN nie zasila kilku twórców PBL)
 ```
 
 ```{r dalsze przygotowanie zbioru do importu - UKD, słowa kluczowe, poloniki}
@@ -292,7 +297,7 @@ nie_poloniki <- bn_ok %>%
 
 bn_ok <- bn_ok %>%
   full_join(.,nie_poloniki,by = "id") %>%
-  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X830, rok, osoba_pbl_dzial_id_name, dziedzina_PBL, bez_ukd_ale_PBL, czy_wspomnienia_reportaz, slowa_literackie, czy_polonik) %>%
+  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X710, X800, X830, rok, osoba_pbl_dzial_id_name, dziedzina_PBL, bez_ukd_ale_PBL, czy_wspomnienia_reportaz, slowa_literackie, czy_polonik) %>%
   unique()
 #wskazanie niepoloników i usunięcie ze zbioru
 nie_poloniki <- bn_ok %>%
