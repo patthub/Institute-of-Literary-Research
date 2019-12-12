@@ -50,6 +50,11 @@ rD <- rsDriver(port=4444L,browser="chrome", chromever="78.0.3904.11")
 #binman::list_versions("chromedriver")
 remDr <- rD$client
 
+
+###Seifert###
+library(jsonlite)
+library(tidyverse)
+
 url <- c("https://data.bn.org.pl/api/bibs.json?author=seifert+jaroslav&amp;limit=100","https://data.bn.org.pl/api/bibs.json?limit=100&amp;subject=seifert+jaroslav")
 
 seifert_author <- jsonlite::fromJSON("https://data.bn.org.pl/api/bibs.json?author=seifert+jaroslav&amp;limit=100") %>% .$bibs %>%
@@ -136,6 +141,24 @@ write.csv2(pbl_viaf, file = "C:/Users/Cezary/Desktop/pbl_bn_viaf.csv", row.names
 a <- jsonlite::fromJSON("https://data.bn.org.pl/api/authorities.json?id=1275862") %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields
 paste(unlist(a),sep = "|")
 ```
+
+```{r Seifert}
+###Seifert###
+library(jsonlite)
+library(tidyverse)
+
+url <- c("https://data.bn.org.pl/api/bibs.json?author=seifert+jaroslav&amp;limit=100","https://data.bn.org.pl/api/bibs.json?limit=100&amp;subject=seifert+jaroslav")
+
+seifert_author <- jsonlite::fromJSON("https://data.bn.org.pl/api/bibs.json?author=seifert+jaroslav&amp;limit=100") %>% .$bibs %>%
+  select(-28)
+
+seifert_subject <- jsonlite::fromJSON("https://data.bn.org.pl/api/bibs.json?limit=100&amp;subject=seifert+jaroslav") %>% .$bibs %>%
+  select(-28)
+write.csv2(seifert_author, file = "C:/Users/[nazwa użytkownika]/Desktop/seifert_author.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(seifert_subject, file = "C:/Users/[nazwa użytkownika]/Desktop/seifert_subject.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+
+```
+
 
 ```{r excercise}
 

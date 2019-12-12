@@ -228,90 +228,34 @@ bn_ks <- bn_ks %>%
   full_join(.,bn_records_pbl_people_id,by = "id")
 ```
 
-```{r dalsze przygotowanie zbioru do importu}
+```{r dalsze przygotowanie zbioru do importu - UKD, słowa kluczowe, poloniki}
 #wskazanie interesujących PBL dziedzin wiedzy po UKD i określenie typu UKD
 bn_ks <- bn_ks %>%
-  mutate(dziedzina_PBL = ifelse(str_detect(X080,"\\$a80[^\\d]")|str_detect(X080,"\\$a82"),"ukd_lit",
-                                ifelse(str_detect(X080,"\\$a791")|str_detect(X080,"\\$a792")|str_detect(X080,"\\$a7\\.09"),"ukd_tfrtv",
-                                       ifelse(str_detect(X080,"\\$a01")|str_detect(X080,"\\$a050")|str_detect(X080,"\\$a070"),"ukd_biblio",
-                                              ifelse(str_detect(X080,"\\$a002")|str_detect(X080,"\\$a305")|str_detect(X080,"\\$a39")|str_detect(X080,"\\$a929[^\\.]"),"ukd_pogranicze","bez_ukd_PBL")))))
-  
-#wczytanie wyselekcjonowanych gatunków literackich na bazie UKD
-gatunki_lit <- sheets_read(ss = "1WwQGithbldJoF1JeoJiuCsF6FECPPFFYOi8IMXuHee8", sheet = "gatunki_literackie") %>%
-  filter(`czy_gat_literacki?`=="tak") %>%
-  select(1,2) %>%
-  unique()
-gatunki_lit_1 <- gatunki_lit %>%
-  filter(pole=="X655") %>%
-  select(1)
-gatunki_lit_2 <- gatunki_lit %>%
-  filter(pole=="X650") %>%
-  select(1)
-#szukanie po wybranych gatunkach literackich dla ukd literackiego
-bez_UKD_lita <- sqldf("select *
-                          from bn_ks a
-                          join gatunki_lit_1 b on a.X655 like ('%'||b.gatunki||'%')") %>%
-  unique() %>%
-  filter(dziedzina_PBL == "bez_ukd_PBL") %>%
+  mutate(dziedzina_PBL = ifelse(str_detect(X080,"(?<=\\$a|:|\\[|\\+|\\()(82)"),"ukd_lit",
+                                ifelse(str_detect(X080,"(?<=\\$a|:|\\[|\\+)(791)")|str_detect(X080,"(?<=\\$a|:)(792)")|str_detect(X080,"\\$a7\\.09"),"ukd_tfrtv",
+                                       ifelse(str_detect(X080,"(?<=\\$a01)(\\(|\\/|2|4|5|9)")|str_detect(X080,"(?<=\\$a|\\[])(050)"),"ukd_biblio",
+                                              ifelse(str_detect(X080,"\\$a002")|str_detect(X080,"(?<=\\$a|:)(305)")|str_detect(X080,"(?<=\\$a39|:39)(\\(438\\)|8\\.2)")|str_detect(X080,"(?<=\\$a|:)(929[^\\.]051)"),"ukd_pogranicze","bez_ukd_PBL")))))
+#wskazanie interesujących PBL rekordów bez UKD, które są w kluczu PBL
+bez_ukd_ale_PBL <- bn_ks %>%
+  select(id, X080, X650, X655, osoba_pbl_dzial_id_name, dziedzina_PBL) %>%
+  filter(dziedzina_PBL == "bez_ukd_PBL"&X080==""&is.na(osoba_pbl_dzial_id_name)) %>%
+  mutate(bez_ukd_ale_PBL = grepl("literat|literac|pisar|bajk|dramat|epigramat|esej|felieton|film|komedi|listy|nowel|opowiadani|pamiętnik|poemiks|poezj|powieść|proza|reportaż|satyr|wspomnieni|Scenariusze zajęć|Podręczniki dla gimnazjów|teatr|Nagrod|aforyzm|baśń|baśnie|polonijn|dialogi|fantastyka naukowa|legend|pieśń|poemat|przypowieś|honoris causa|filologi|kino polskie|pieśni",X650, ignore.case = TRUE)|grepl("literat|literac|pisar|bajk|dramat|epigramat|esej|felieton|film|komedi|listy|nowel|opowiadani|pamiętnik|poemiks|poezj|powieść|proza|reportaż|satyr|wspomnieni|Scenariusze zajęć|Podręczniki dla gimnazjów|teatr|Nagrod|aforyzm|baśń|baśnie|polonijn|dialogi|fantastyka naukowa|legend|pieśń|poemat|przypowieś|honoris causa|filologi|kino polskie|pieśni",X655,ignore.case = TRUE)) %>%
+  filter(bez_ukd_ale_PBL == TRUE) %>%
   select(id) %>%
-  mutate(bez_ukd_ale_gatunek = "bez_ukd_lit")
-bez_UKD_litb <- sqldf("select *
-                          from bn_ks a
-                          join gatunki_lit_2 b on a.X650 like ('%'||b.gatunki||'%')") %>%
-  unique() %>%
-  filter(dziedzina_PBL == "bez_ukd_PBL") %>%
-  select(id) %>%
-  mutate(bez_ukd_ale_gatunek = "bez_ukd_lit")
-#wczytanie wyselekcjonowanych gatunków tfrtv na bazie UKD
-gatunki_tfrtv <- sheets_read(ss = "1SU4dDultOtikO-7Yzv_hfIrgtQNv31sftUNxCTryr9Q", sheet = "gatunki_tfrtv") %>%
-  filter(`czy_gat_tfrtv?`=="tak") %>%
-  select(1,2) %>%
-  unique()
-
-gatunki_tfrtv_1 <- gatunki_tfrtv %>%
-  filter(pole=="X655") %>%
-  select(1)
-gatunki_tfrtv_2 <- gatunki_tfrtv %>%
-  filter(pole=="X650") %>%
-  select(1)
-#szukanie po wybranych gatunkach tfrtv dla ukd literackiego
-bez_UKD_tfrtv_a <- sqldf("select *
-                          from bn_ks a
-                          join gatunki_tfrtv_1 b on a.X655 like ('%'||b.gatunki||'%')") %>%
-  unique() %>%
-  filter(dziedzina_PBL == "bez_ukd_PBL") %>%
-  select(id) %>%
-  mutate(bez_ukd_ale_gatunek = "bez_ukd_tfrtv")
-
-bez_UKD_tfrtv_b <- sqldf("select *
-                          from bn_ks a
-                          join gatunki_tfrtv_2 b on a.X650 like ('%'||b.gatunki||'%')") %>%
-  unique() %>%
-  filter(dziedzina_PBL == "bez_ukd_PBL") %>%
-  select(id) %>%
-  mutate(bez_ukd_ale_gatunek = "bez_ukd_tfrtv")
-#połączenie plików bez ukd, ale z gatunkami
-bez_UKD <- rbind(bez_UKD_lita,bez_UKD_litb,bez_UKD_tfrtv_a,bez_UKD_tfrtv_b) %>%
-  unique() %>%
-  arrange(id) %>%
-  group_by(id) %>%
-  mutate(bez_ukd_ale_gatunek = paste(bez_ukd_ale_gatunek,collapse = "|")) %>%
-  ungroup() %>%
-  unique()
+  mutate(bez_ukd_ale_PBL = "tak")
 
 bn_ks <- bn_ks %>%
-  full_join(.,bez_UKD,by = "id") %>%
-  filter(!is.na(id))
+  full_join(.,bez_ukd_ale_PBL,by = "id")
 
-#wspomnienia,pamiętniki,literatura podróżnicza
+#wspomnienia,pamiętniki,literatura podróżnicza,reportaż
 wspomnienia <- bn_ks %>%
-  mutate(czy_wspomnienia = ifelse(str_detect(X655,"Pamiętniki i wspomnienia")|str_detect(X655,"Literatura podróżnicza")|str_detect(X655,"Pamiętniki"),"tak",NA)) %>%
-  select(id,czy_wspomnienia) %>%
+  mutate(czy_wspomnienia_reportaz = ifelse(str_detect(X655,"Pamiętniki i wspomnienia")|str_detect(X655,"Literatura podróżnicza")|str_detect(X655,"Pamiętniki")|str_detect(X655,"Reportaż"),"tak",NA)) %>%
+  select(id,czy_wspomnienia_reportaz) %>%
   unique()
 bn_ks <- bn_ks %>%
   full_join(.,wspomnienia,by = "id")
 
-#słowa literackie w polu 245, 650 i 655
+#słowa literackie w polu 245
 rekordy_slowa <- sqldf("select *
                     from bn_ks a
                     where LOWER(a.X245) like ('%'||'pisar'||'%')
@@ -319,20 +263,7 @@ rekordy_slowa <- sqldf("select *
                    or LOWER(a.X245) like ('%'||'literac'||'%')
                    or LOWER(a.X245) like ('%'||'teatr'||'%')
                    or LOWER(a.X245) like ('%'||'film'||'%')
-                   or LOWER(a.X245) like ('%'||'dramat'||'%')
-                   or LOWER(a.X650) like ('%'||'pisar'||'%')
-				           or LOWER(a.X650) like ('%'||'pisar'||'%')
-                   or LOWER(a.X650) like ('%'||'literat'||'%')
-                   or LOWER(a.X650) like ('%'||'literac'||'%')
-                   or LOWER(a.X650) like ('%'||'teatr'||'%')
-                   or LOWER(a.X650) like ('%'||'film'||'%')
-                   or LOWER(a.X650) like ('%'||'dramat'||'%')
-				           or LOWER(a.X655) like ('%'||'pisar'||'%')
-                   or LOWER(a.X655) like ('%'||'literat'||'%')
-                   or LOWER(a.X655) like ('%'||'literac'||'%')
-                   or LOWER(a.X655) like ('%'||'teatr'||'%')
-                   or LOWER(a.X655) like ('%'||'film'||'%')
-                   or LOWER(a.X655) like ('%'||'dramat'||'%')") %>%
+                   or LOWER(a.X245) like ('%'||'dramat'||'%')") %>%
   select(id) %>%
   mutate(slowa_literackie = "tak") %>%
   unique()
@@ -340,14 +271,7 @@ bn_ks <- bn_ks %>%
   full_join(.,rekordy_slowa,by = "id")
 
 bn_ok <- bn_ks %>%
-  filter(!(is.na(osoba_pbl_dzial_id_name)&dziedzina_PBL=="bez_ukd_PBL"&is.na(bez_ukd_ale_gatunek)&is.na(czy_wspomnienia)&is.na(slowa_literackie)))
-
-#reszta rekordów, które nie będą zaimportowane
-reszta <- sqldf("select *
-               from bn_ks a
-               where a.id not in 
-               (select b.id
-               from bn_ok b)")
+  filter(!(is.na(osoba_pbl_dzial_id_name)&dziedzina_PBL=="bez_ukd_PBL"&is.na(bez_ukd_ale_PBL)&is.na(czy_wspomnienia_reportaz)&is.na(slowa_literackie)))
 
 #usunięcie zagranicznych zapisów, które nie są polonikami 
 #na podstawie braku wystąpień frazy "pol" w polach MARC
@@ -368,7 +292,7 @@ nie_poloniki <- bn_ok %>%
 
 bn_ok <- bn_ok %>%
   full_join(.,nie_poloniki,by = "id") %>%
-  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X830, rok, osoba_pbl_dzial_id_name, dziedzina_PBL, bez_ukd_ale_gatunek, czy_wspomnienia, slowa_literackie, czy_polonik) %>%
+  select(id, X008, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X830, rok, osoba_pbl_dzial_id_name, dziedzina_PBL, bez_ukd_ale_PBL, czy_wspomnienia_reportaz, slowa_literackie, czy_polonik) %>%
   unique()
 #wskazanie niepoloników i usunięcie ze zbioru
 nie_poloniki <- bn_ok %>%
@@ -443,7 +367,7 @@ bn_ok <- bn_ok %>%
   left_join(.,do_importu_NIE,by = "joint") %>%
   mutate(X650 = ifelse(is.na(X650),"",as.character(X650)),
          X655 = ifelse(is.na(X655),"",as.character(X655)))
-
+###tutaj### przemyśleć to jeszcze - może da się jeszcze bardziej usunąć
 do_importu_NIE <- bn_ok %>%
   filter(is.na(osoba_pbl_dzial_id_name)&is.na(slowa_literackie)&do_wyrzucenia_na_podstawie_INO=="tak")
 
@@ -500,9 +424,14 @@ bn_ok <- sqldf("select *
                from bn_ok a
                where a.id not in (select b.id from do_importu_NIE2 b)") %>%
   select(-do_wyrzucenia_na_podstawie_INO)
-###TUTAJ###
 
-#KP działa z listą rekordów, które nie mają UKD, ale mają gatunki - intuicja jest taka, że lista jest zbyt długa, a gatunki brane za szeroko (gatunki zbudował jeszcze stary wybór UKD)
+#reszta rekordów, które nie będą zaimportowane
+reszta <- sqldf("select *
+               from bn_ks a
+               where a.id not in 
+               (select b.id
+               from bn_ok b)")
+###TUTAJ###
 ```
 
 
