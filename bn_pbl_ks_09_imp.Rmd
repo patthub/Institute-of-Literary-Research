@@ -233,6 +233,7 @@ bn_ks <- bn_ks %>%
 ###sprawdzić czy nie ma zdublowanego mapowania BN->PBL (czy np. jedna osoba z BN nie zasila kilku twórców PBL)
 ```
 
+
 ```{r dalsze przygotowanie zbioru do importu - UKD, słowa kluczowe, poloniki}
 #wskazanie interesujących PBL dziedzin wiedzy po UKD i określenie typu UKD
 bn_ks <- bn_ks %>%
@@ -372,9 +373,10 @@ bn_ok <- bn_ok %>%
   left_join(.,do_importu_NIE,by = "joint") %>%
   mutate(X650 = ifelse(is.na(X650),"",as.character(X650)),
          X655 = ifelse(is.na(X655),"",as.character(X655)))
-###tutaj### przemyśleć to jeszcze - może da się jeszcze bardziej usunąć
+
 do_importu_NIE <- bn_ok %>%
-  filter(is.na(osoba_pbl_dzial_id_name)&is.na(slowa_literackie)&do_wyrzucenia_na_podstawie_INO=="tak")
+  filter(is.na(osoba_pbl_dzial_id_name)&is.na(slowa_literackie)&do_wyrzucenia_na_podstawie_INO=="tak") %>%
+  filter(!grepl("literat|literac|pamiętnik|pisar",X655,ignore.case = TRUE))
 
 bn_ok <- sqldf("select *
                from bn_ok a
@@ -443,12 +445,12 @@ reszta <- sqldf("select *
 ```{r przypisanie książce rodzaju (podmiotowa, przedmiotowa, antologie, współwydanie)}
 bn_ok <- bn_ok %>%
   mutate(czy_ma_ukd = ifelse(X080=="","nie","tak"),
-         position_dash = ifelse(grepl("\\\\\\\\\\$a821\\.",X080),str_locate(X080,"\\-")[,1], NA),
+         position_dash = ifelse(grepl("(\\\\\\\\\\$a|:)(821\\.)",X080),str_locate(X080,"\\-")[,1], NA),
          position_dash = ifelse(is.na(position_dash),"",as.integer(position_dash)),
          position_091 = str_locate(X080,"\\(091\\)")[,1],
          position_091 = ifelse(is.na(position_091),"",as.integer(position_091)),
          rodzaj_ksiazki = ifelse(grepl("Antologi",X655),"antologia",
-                        ifelse(position_091!=""&position_dash!="",
+                                 ifelse(position_091!=""&position_dash!="",
                           ifelse(as.integer(position_091)<as.integer(position_dash), "przedmiotowa", "podmiotowa"),
                           ifelse(position_dash!="","podmiotowa","przedmiotowa"))),
          rodzaj_ksiazki = ifelse(czy_ma_ukd=="nie","",as.character(rodzaj_ksiazki)))
@@ -463,103 +465,32 @@ gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X
 bn_ok$czy_podmiotowy <- grepl(gatunki_podmiotowe,bn_ok$X655)
 bn_ok <- bn_ok %>%
   mutate(rodzaj_ksiazki = ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE,"podmiotowa",
-                                 ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki))))
+                                 ifelse(X100!=""&grepl("aPamiętnik|aLiteratura podróżnicza",X655),"podmiotowa",
+                                        ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655),"podmiotowa",
+                                               ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN"),"podmiotowa",
+                                                      ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))%>%
+  select(1:27,34)
+```
 
+```{r wyznaczenie zbioru automatycznie IOK}
+###TUTAJ###
 test <- bn_ok %>%
-  filter(rodzaj_ksiazki=="przedmiotowa") %>%
-  select(id,X245,X650,X655) %>%
-  unique()
-write.csv2(test, "C:/Users/Cezary/Desktop/test.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+  mutate(#X500 = ifelse(grepl("\\$aTyt[,\\.] oryg",X500),"",as.character(X500)),
+         ile_gatunkow = ifelse(rodzaj_ksiazki=="podmiotowa",str_count(X655,"\\$a"),"nie"),
+         tylko_podmiotowe = ifelse(str_count(X655,"\\$a")>0&str_count(X655,"\\$a")==str_count(X655,"\\$y"),"tak","nie"))
 
-###TUTAJ###
+test2 <- test %>%
+  filter(!grepl("pseud|nazwa",X500,ignore.case = TRUE)&X501==""&(tylko_podmiotowe=="tak"|ile_gatunkow=="1"))
 
-count <- as.data.frame(table(bn_ok$rodzaj_ksiazki))
-
-###TUTAJ###
-UKD <- UKD %>%
-  select(id,X655, rodzaj, X080, X245,X100)
-UKD <- merge(x=UKD,y=wszystkie,by = "id",all.x = TRUE)
-UKD <- UKD %>%
-    filter(!`czy_idzie_do_PBL` %in% "nie")
-
-ukd_list <- UKD %>%
-  filter(rodzaj=="podmiotowa"&X655!="") %>%
-  select(X655,rodzaj) %>%
+test3 <- bn_ok %>%
+  select(X546) %>%
   unique()
 
-bez_UKD <- merge(x=bez_UKD,y=wszystkie,by = "id",all.x = TRUE)
-bez_UKD <- bez_UKD %>%
-    filter(!`czy_idzie_do_PBL` %in% "nie")
-bez_UKD <- sqldf("select a.id,a.X655,b.rodzaj,a.X080,a.X245,a.X100,a.`czy_idzie_do_PBL`
-              from bez_UKD a
-              left join ukd_list b on b.X655=a.X655")
-
-write.csv2(bez_UKD, "C:/Users/Cezary/Desktop/bez_UKD.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-#r?czne zmiany, pami?ta? o pliku
-#bez_UKD <- read.csv2("C:/Users/Cezary/Desktop/bez_UKD.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-bez_UKD <- read.csv2("C:/Users/cezar/Documents/PBL/Import danych z zewn?trz/Biblioteka Narodowa/ksi??ki/bez_UKD.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-
-
-#podzia? na podmiotowe, przedmiotowe i antologie
-podmiotowe <- sqldf("select *
-                    from wszystkie_full a
-                    where a.id in (select a.id from UKD a where a.rodzaj like 'podmiotowa')
-                    or a.id in (select a.id from bez_UKD a where a.rodzaj like 'podmiotowa')")
-
-antologie <- sqldf("select *
-                    from wszystkie_full a
-                    where a.id in (select a.id from UKD a where a.rodzaj like 'antologia')
-                    or a.id in (select a.id from bez_UKD a where a.rodzaj like 'antologia')")
-
-przedmiotowe <- sqldf("select *
-                    from wszystkie_full a
-                    where a.id in (select a.id from UKD a where a.rodzaj like 'przedmiotowa')
-                    or a.id in (select a.id from bez_UKD a where a.rodzaj like 'przedmiotowa')")
-
-
-ukd_tfrtv_google <- gs_read(gs_title("2005-2008_UKD_tfrtv"), ws = "2005-2008_UKD_tfrtv")
-ukd_tfrtv_google <- ukd_tfrtv_google %>%
-    filter(!`czy_idzie_do_PBL` %in% "nie") %>%
-  select(1)
-ukd_tfrtv_google <- sqldf("select *
-                    from bn_ks a
-                    where a.id in (select a.id from ukd_tfrtv_google a)")
-
-bez_ukd_tfrtv_google <- gs_read(gs_title("2005-2008_bez_UKD_tfrtv"), ws = "2005-2008_bez_UKD_tfrtv")
-bez_ukd_tfrtv_google <- bez_ukd_tfrtv_google %>%
-    filter(!`czy_idzie_do_PBL` %in% "nie") %>%
-  select(1)
-bez_ukd_tfrtv_google <- sqldf("select *
-                    from bn_ks a
-                    where a.id in (select a.id from bez_ukd_tfrtv_google a)")
-
-rekordy_dziedziny <- gs_read(gs_title("2005-2008_rekordy_dziedziny"), ws = "2005-2008_rekordy_dziedziny")
-rekordy_dziedziny <- rekordy_dziedziny %>%
-    filter(!`czy_idzie_do_PBL` %in% "nie") %>%
-  select(1)
-rekordy_dziedziny <- sqldf("select *
-                    from bn_ks a
-                    where a.id in (select a.id from rekordy_dziedziny a)")
-
-rekordy_nazwiska <- gs_read(gs_title("2005-2008_rekordy_nazwiska"), ws = "2005-2008_rekordy_nazwiska")
-rekordy_nazwiska <- rekordy_nazwiska %>%
-  select(1)
-rekordy_nazwiska <- sqldf("select *
-                    from bn_ks a
-                    where a.id in (select a.id from rekordy_nazwiska a)")
-
-rekordy_slowa <- gs_read(gs_title("2005-2008_rekordy_slowa"), ws = "2005-2008_rekordy_slowa")
-rekordy_slowa <- rekordy_slowa %>%
-  select(1)
-rekordy_slowa <- sqldf("select *
-                    from bn_ks a
-                    where a.id in (select a.id from rekordy_slowa a)")
-
-przedmiotowe <- rbind(przedmiotowe, ukd_tfrtv_google,bez_ukd_tfrtv_google,rekordy_dziedziny,rekordy_nazwiska,rekordy_slowa)
-przedmiotowe <- przedmiotowe %>%
-  unique()
+count <- as.data.frame(table(test$ile_gatunkow))
+  
 
 ```
+
 
 ```{r wczytanie danych PBL}
 #po??czenie z baz? PBL
