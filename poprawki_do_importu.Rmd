@@ -258,30 +258,6 @@ test <- dataPdf %>%
 ```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ``` {r }
 
 lista_ksiazek <- lista_ksiazek %>%

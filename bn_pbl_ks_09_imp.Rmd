@@ -245,7 +245,7 @@ bn_ks <- bn_ks %>%
 bez_ukd_ale_PBL <- bn_ks %>%
   select(id, X080, X650, X655, osoba_pbl_dzial_id_name, dziedzina_PBL) %>%
   filter(dziedzina_PBL == "bez_ukd_PBL"&X080==""&is.na(osoba_pbl_dzial_id_name)) %>%
-  mutate(bez_ukd_ale_PBL = grepl("literat|literac|pisar|bajk|dramat|epigramat|esej|felieton|film|komedi|listy|nowel|opowiadani|pamiętnik|poemiks|poezj|powieść|proza|reportaż|satyr|wspomnieni|Scenariusze zajęć|Podręczniki dla gimnazjów|teatr|Nagrod|aforyzm|baśń|baśnie|polonijn|dialogi|fantastyka naukowa|legend|pieśń|poemat|przypowieś|honoris causa|filologi|kino polskie|pieśni",X650, ignore.case = TRUE)|grepl("literat|literac|pisar|bajk|dramat|epigramat|esej|felieton|film|komedi|listy|nowel|opowiadani|pamiętnik|poemiks|poezj|powieść|proza|reportaż|satyr|wspomnieni|Scenariusze zajęć|Podręczniki dla gimnazjów|teatr|Nagrod|aforyzm|baśń|baśnie|polonijn|dialogi|fantastyka naukowa|legend|pieśń|poemat|przypowieś|honoris causa|filologi|kino polskie|pieśni",X655,ignore.case = TRUE)) %>%
+  mutate(bez_ukd_ale_PBL = grepl("literat|literac|pisar|bajk|dramat|epigramat|esej|felieton|film|komedi|nowel|opowiadani|pamiętnik|poemiks|poezj|powieść|proza|reportaż|satyr|wspomnieni|Scenariusze zajęć|Podręczniki dla gimnazjów|teatr|Nagrod|aforyzm|baśń|baśnie|polonijn|dialogi|fantastyka naukowa|legend|pieśń|poemat|przypowieś|honoris causa|filologi|kino polskie|pieśni",X650, ignore.case = TRUE)|grepl("literat|literac|pisar|bajk|dramat|epigramat|esej|felieton|film|komedi|nowel|opowiadani|pamiętnik|poemiks|poezj|powieść|proza|reportaż|satyr|wspomnieni|Scenariusze zajęć|Podręczniki dla gimnazjów|teatr|Nagrod|aforyzm|baśń|baśnie|polonijn|dialogi|fantastyka naukowa|legend|pieśń|poemat|przypowieś|honoris causa|filologi|kino polskie|pieśni",X655,ignore.case = TRUE)) %>%
   filter(bez_ukd_ale_PBL == TRUE) %>%
   select(id) %>%
   mutate(bez_ukd_ale_PBL = "tak")
@@ -480,12 +480,139 @@ test <- bn_ok %>%
          tylko_podmiotowe = ifelse(str_count(X655,"\\$a")>0&str_count(X655,"\\$a")==str_count(X655,"\\$y"),"tak","nie"))
 
 test2 <- test %>%
-  filter(!grepl("pseud|nazwa",X500,ignore.case = TRUE)&X501==""&(tylko_podmiotowe=="tak"|ile_gatunkow=="1"))
+  filter(!grepl("pseud|nazwa",X500,ignore.case = TRUE)&X501==""&(tylko_podmiotowe=="tak"|ile_gatunkow=="1")&X100!="")
+
+#zestawienie 100 i 245
+#100
+marc_field_100 <- test2 %>%
+  select(id,X100)%>%
+  filter(X100!="") %>%
+  mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X100",sep = "~",direction = "long") %>%
+  filter(X100!="") %>%
+  mutate(X100=str_remove_all(X100,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(test2$X100,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_100<-cbind(marc_field_100,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_100$X100 <- str_replace(marc_field_100$X100,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_100$X100),str_replace_all(gsub(string,"\\3",marc_field_100$X100),"\\${2}.", "~"),NA)
+}
+marc_field_100 <- marc_field_100 %>%
+  select(id,`$a`) %>%
+  mutate(bn_nazwisko = ifelse(str_detect(`$a`,","),str_replace(`$a`,"^(.*?)(, )(.*?$)","\\1"),as.character(`$a`)),
+         bn_imie = ifelse(str_detect(`$a`,","),str_replace(`$a`,"^(.*?)(, )(.*?$)","\\3"),"")) %>%
+  select(id,bn_nazwisko,bn_imie)
+
+test2 <- test2 %>%
+  full_join(.,marc_field_100,by = "id")
+
+x <- 1:length(test2$id)
+for (i in x) {
+  
+  test2$czy_nazwisko[i] <- grepl(test2$bn_nazwisko[i],test2$X245[i])
+  test2$czy_imie[i] <- grepl(test2$bn_imie[i],test2$X245[i])
+  
+}
+test2 <- test2 %>%
+  filter(czy_nazwisko==1&czy_imie==1&!grepl("et al\\.",X245)) %>%
+  mutate(jezyk = str_extract(X041,("(?<=\\$h)(...)"))) %>%
+  mutate(czy_tytul_obcy = ifelse(is.na(jezyk),"nie dotyczy",
+                                 ifelse(!grepl("pol",jezyk),
+                                        ifelse(X246!="","ok",
+                                               ifelse(grepl("Tyt[,\\.] oryg",X501),"ok","problem")),"nie dotyczy")))
+###usunąć te, które nie mają tytułów oryginalnych
+count <- as.data.frame(table(test2$czy_tytul_obcy))
+  
+###
 
 test3 <- bn_ok %>%
   select(X546) %>%
   unique()
 
+# przedmiotowe; osoba z PBL jako temat
+#600
+marc_field_600 <- bn_ok %>%
+  select(id,X600)%>%
+  filter(X600!="") %>%
+  mutate(X600=str_replace_all(X600,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X600",sep = "~",direction = "long") %>%
+  filter(X600!="") %>%
+  mutate(X600=str_remove_all(X600,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X600,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(bn_ok$X600,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_600)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_600<-cbind(marc_field_600,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+x <- 1:length(subfield_list)
+
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_600$X600 <- str_replace(marc_field_600$X600,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_600[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_600$X600),str_replace_all(gsub(string,"\\3",marc_field_600$X600),"\\${2}.", "~"),NA)
+}
+marc_field_600 <- marc_field_600 %>%
+  select(id,`$a`,`$d`,`$c`) %>%
+  mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
+  select(id,name) %>%
+  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
+         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
+
+tworca_i_dzial <- dbGetQuery(PBL,
+                             "select tw.tw_tworca_id \"pbl_id\", tw.tw_nazwisko||', '||tw.tw_imie \"tworca_pbl\", dz.dz_dzial_id||'|'||dz.dz_nazwa \"osoba_pbl_dzial_id_name\"
+                              from pbl_tworcy tw
+                              full join pbl_dzialy dz on dz.dz_dzial_id=tw.tw_dz_dzial_id")
+
+bn_records_pbl_people <- marc_field_600 %>%
+  unique() %>%
+  inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
+  select(1:3) %>%
+  left_join(.,tworca_i_dzial,by = "pbl_id")
+bn_records_pbl_people_id <- bn_records_pbl_people %>%
+  select(id,tworca_pbl) %>%
+  group_by(id) %>%
+  mutate(tworca_pbl = paste(unique(tworca_pbl),collapse = "~")) %>%
+  ungroup() %>%
+  unique() %>%
+  filter(!grepl("~",tworca_pbl))
+
+test_przedm <- bn_ok %>%
+  full_join(.,bn_records_pbl_people_id,by = "id") %>%
+  filter(rodzaj_ksiazki=="przedmiotowa"&X600!=""&str_count(X600,"\\$a")==1&!is.na(tworca_pbl)) %>%
+  mutate(czy_o_czyms = str_detect(X655,"\\$x"))
+test_przedm$czy_gatunek <- grepl(gatunki_podmiotowe,test_przedm$X655)
+test_przedm2 <- test_przedm %>%
+  filter((grepl("tematyka|biografia|historia",X655,ignore.case = TRUE)|czy_o_czyms==TRUE)&!grepl("Księga pamiątkowa",X655)) %>%
+  filter(grepl("((a|:)(821))|(791)",X080))
+
+###
 count <- as.data.frame(table(test$ile_gatunkow))
   
 
