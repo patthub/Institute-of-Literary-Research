@@ -8,6 +8,17 @@ cel: automatycznie IMPORT OK co się da; IMPORT - 5000 zapisów z ukd i deskrypt
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
 pacman::p_load(utf8,googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC)
+test2 <- bn_ks %>%
+  select(id, X245, X040) %>%
+  filter(grepl("\\$aWA|\\$aW ",X040))
+test3 <- bn_ks %>%
+  select(X040) %>%
+  mutate(X040 = str_extract(X040,"\\$a..")) %>%
+  unique()
+
+test <- bn_ks %>%
+  select(id, X245, X040) %>%
+  filter(is.na(X040))
 
 #wgranie zbiorów książek
 bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) %>%
