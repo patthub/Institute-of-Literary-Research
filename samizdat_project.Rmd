@@ -8,17 +8,12 @@ pacman::p_load(stringr,tidyverse,RJDBC,sqldf,dplyr,splitstackshape,svMisc,data.t
 
 #downloading files
 bn_books <- read.csv2("C:/Users/Cezary/Downloads/pw_ksiazki.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-#bn_books <- read.csv2("C:/Users/cezar/Downloads/pw_ksiazki.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 bn_articles <- read.csv2("C:/Users/Cezary/Downloads/pw_czasopisma.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-#bn_articles <- read.csv2("C:/Users/cezar/Downloads/pw_czasopisma.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 cz_books <- read.csv2("C:/Users/Cezary/Downloads/cz_pw_file_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-#cz_books <- read.csv2("C:/Users/cezar/Downloads/cz_pw_file_1.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 cz_articles <- read.csv2("C:/Users/Cezary/Downloads/cz_pw_file_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-#cz_articles <- read.csv2("C:/Users/cezar/Downloads/cz_pw_file_2.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+
 #connecting to PBL database
 jdbcDriver = JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
-#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
-#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 pbl_articles1 <- dbGetQuery(PBL,
                         "select z.za_zapis_id \"rekord_id\", z.za_type \"typ\", rz.rz_rodzaj_id \"rodzaj_zapisu_id\", rz.rz_nazwa \"rodzaj_zapisu\", 
@@ -421,6 +416,34 @@ pbl_books <- sqldf("select *
               from pbl_books1 b
               where b.rekord_id not in (select a.rekord_id
               from pbl_books a)")
+
+hasla_przekrojowe <- dbGetQuery(PBL,
+                                "select hpz.hz_za_zapis_id,hp.hp_nazwa,khp.kh_nazwa
+                                from IBL_OWNER.pbl_hasla_przekrojowe hp
+                                join IBL_OWNER.pbl_hasla_przekr_zapisow hpz on hpz.hz_hp_haslo_id=hp.hp_haslo_id
+                                join IBL_OWNER.pbl_klucze_hasla_przekr khp on khp.kh_hp_haslo_id=hp.hp_haslo_id
+                                join IBL_OWNER.pbl_hasla_zapisow_klucze hzk on hzk.hzkh_hz_hp_haslo_id=hp.hp_haslo_id and hzk.hzkh_kh_klucz_id=khp.kh_klucz_id and hzk.hzkh_hz_za_zapis_id=hpz.hz_za_zapis_id")
+
+hasla_przekrojowe2 <- dbGetQuery(PBL,
+                                 "select hpz.hz_za_zapis_id,hp.hp_nazwa,to_char(null) \"KH_NAZWA\"
+from IBL_OWNER.pbl_hasla_przekrojowe hp
+join IBL_OWNER.pbl_hasla_przekr_zapisow hpz on hpz.hz_hp_haslo_id=hp.hp_haslo_id")
+
+hasla_przekrojowe <- sqldf("select *
+              from hasla_przekrojowe a
+              UNION
+              select *
+              from hasla_przekrojowe2 b
+              where b.HZ_ZA_ZAPIS_ID||'|'||HP_NAZWA not in (select a.HZ_ZA_ZAPIS_ID||'|'||HP_NAZWA
+              from hasla_przekrojowe a)")
+
+indeks_osobowy <- dbGetQuery(PBL,
+                             "select odi_za_zapis_id, odi_nazwisko, odi_imie
+                              from IBL_OWNER.pbl_osoby_do_indeksu")
+
+pbl_books <- merge(pbl_books,indeks_osobowy,by.x = "rekord_id",by.y = "ODI_ZA_ZAPIS_ID", all.x = TRUE)
+pbl_books <- merge(pbl_books,hasla_przekrojowe,by.x = "rekord_id", by.y = "HZ_ZA_ZAPIS_ID", all.x = TRUE)
+
 #write.csv2(pbl_books, "C:/Users/Cezary/Downloads/pbl_books.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
 
@@ -1031,7 +1054,7 @@ pbl_record_people_art <- rbind(pbl_record_people_art_creators,pbl_record_people_
 
 ```
 
-```{r merging data}
+```{r merging personal data}
 
 #putting all together
 record_people <- rbind(bn_record_people,cz_record_people,cz_record_people_art,pbl_record_people_books,pbl_record_people_art)
@@ -1162,6 +1185,289 @@ tab3 <- tab3 %>%
 write.csv2(record_people, "C:/Users/Cezary/Desktop/tab1.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 write.csv2(tab_2, "C:/Users/Cezary/Desktop/tab_2.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 ```
+
+```{r preparing file for institutions}
+#bn_books
+trim <- function (x) gsub("^\\s+|\\s+$", "", x)
+#field X110
+marc_field <- bn_books %>%
+  select(id,X110)%>%
+  filter(X110!="") %>%
+  cSplit(.,"X110",sep = "|",direction = "long") %>%
+  filter(X110!="")
+subfield_list<- str_extract_all(bn_books$X110,"\\%.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+marc_field<-cbind(marc_field,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field$X110 <- str_replace(marc_field$X110,subfield_list_char[i],"|\\1")
+}
+subfield_list_char2 <- str_replace_all(subfield_list,"\\%","\\\\%")
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\%)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field[,i+2] <- ifelse(grepl(subfield_list_char2[i],marc_field$X110),str_replace_all(gsub(string,"\\3",marc_field$X110),"\\%.", "~"),NA)
+}
+bn_institutions_110 <- marc_field %>%
+  mutate(MRC = "110",
+         Entity_Name = `%1`,
+         Related_Entity_Sub_Entity = `%2`,
+         Related_Entity_Main_Entity = NA,
+         Located_Location = `%6`,
+         subfield = "%1") %>%
+  select(id,MRC,Entity_Name,Related_Entity_Sub_Entity,Related_Entity_Main_Entity,Located_Location,subfield)
+sub_institutions <- marc_field %>%
+  filter(!is.na(`%2`)) %>%
+  mutate(MRC = "110",
+         Entity_Name = `%2`,
+         Related_Entity_Sub_Entity = NA,
+         Related_Entity_Main_Entity = `%1`,
+         Located_Location = `%7`,
+         subfield = "%2") %>%
+  select(id,MRC,Entity_Name,Related_Entity_Sub_Entity,Related_Entity_Main_Entity,Located_Location,subfield)
+bn_institutions_110 <- rbind(bn_institutions_110,sub_institutions)
+
+#field X120
+marc_field <- bn_books %>%
+  select(id,X120)%>%
+  filter(X120!="") %>%
+  cSplit(.,"X120",sep = "|",direction = "long") %>%
+  filter(X120!="")
+subfield_list<- str_extract_all(bn_books$X120,"\\%.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+marc_field<-cbind(marc_field,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field$X120 <- str_replace(marc_field$X120,subfield_list_char[i],"|\\1")
+}
+subfield_list_char2 <- str_replace_all(subfield_list,"\\%","\\\\%")
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\%)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field[,i+2] <- ifelse(grepl(subfield_list_char2[i],marc_field$X120),str_replace_all(gsub(string,"\\3",marc_field$X120),"\\%.", "~"),NA)
+}
+
+bn_institutions_120 <- marc_field %>%
+  mutate(MRC = "120",
+         Entity_Name = `%1`,
+         Related_Entity_Sub_Entity = `%2`,
+         Related_Entity_Main_Entity = NA,
+         Located_Location = NA,
+         subfield = "%1") %>%
+  select(id,MRC,Entity_Name,Related_Entity_Sub_Entity,Related_Entity_Main_Entity,Located_Location,subfield)
+sub_institutions <- marc_field %>%
+  filter(!is.na(`%2`)) %>%
+  mutate(MRC = "120",
+         Entity_Name = `%2`,
+         Related_Entity_Sub_Entity = NA,
+         Related_Entity_Main_Entity = `%1`,
+         Located_Location = NA,
+         subfield = "%2") %>%
+  select(id,MRC,Entity_Name,Related_Entity_Sub_Entity,Related_Entity_Main_Entity,Located_Location,subfield)
+bn_institutions_120 <- rbind(bn_institutions_120,sub_institutions)
+
+#field X210
+marc_field <- bn_books %>%
+  select(id,X210)%>%
+  filter(X210!="") %>%
+  cSplit(.,"X210",sep = "|",direction = "long") %>%
+  filter(X210!="")
+subfield_list<- str_extract_all(bn_books$X210,"\\%.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+marc_field<-cbind(marc_field,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field$X210 <- str_replace(marc_field$X210,subfield_list_char[i],"|\\1")
+}
+subfield_list_char2 <- str_replace_all(subfield_list,"\\%","\\\\%")
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\%)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field[,i+2] <- ifelse(grepl(subfield_list_char2[i],marc_field$X210),str_replace_all(gsub(string,"\\3",marc_field$X210),"\\%.", "~"),NA)
+}
+
+bn_institutions_210 <- marc_field %>%
+  mutate(MRC = "210",
+         Entity_Name = `%c`,
+         Related_Entity_Sub_Entity = NA,
+         Related_Entity_Main_Entity = NA,
+         Located_Location = `%a`,
+         subfield = "%c") %>%
+  select(id,MRC,Entity_Name,Related_Entity_Sub_Entity,Related_Entity_Main_Entity,Located_Location,subfield)
+sub_institutions <- marc_field %>%
+  filter(!is.na(`%g`)) %>%
+  mutate(MRC = "210",
+         Entity_Name = `%g`,
+         Related_Entity_Sub_Entity = NA,
+         Related_Entity_Main_Entity = NA,
+         Located_Location = `%e`,
+         subfield = "%g") %>%
+  select(id,MRC,Entity_Name,Related_Entity_Sub_Entity,Related_Entity_Main_Entity,Located_Location,subfield)
+bn_institutions_210 <- rbind(bn_institutions_210,sub_institutions)
+#field X225
+marc_field <- bn_books %>%
+  select(id,X225)%>%
+  filter(X225!="") %>%
+  cSplit(.,"X225",sep = "|",direction = "long") %>%
+  filter(X225!="")
+subfield_list<- str_extract_all(bn_books$X225,"\\%.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+marc_field<-cbind(marc_field,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field$X225 <- str_replace(marc_field$X225,subfield_list_char[i],"|\\1")
+}
+subfield_list_char2 <- str_replace_all(subfield_list,"\\%","\\\\%")
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\%)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field[,i+2] <- ifelse(grepl(subfield_list_char2[i],marc_field$X225),str_replace_all(gsub(string,"\\3",marc_field$X225),"\\%.", "~"),NA)
+}
+bn_institutions_225 <- marc_field %>%
+  mutate(MRC = "225",
+         Entity_Name = `%f`,
+         Related_Entity_Sub_Entity = NA,
+         Related_Entity_Main_Entity = NA,
+         Located_Location = NA,
+         subfield = "%f") %>%
+  select(id,MRC,Entity_Name,Related_Entity_Sub_Entity,Related_Entity_Main_Entity,Located_Location,subfield)
+
+#field X710
+marc_field <- bn_books %>%
+  select(id,X710)%>%
+  filter(X710!="") %>%
+  cSplit(.,"X710",sep = "|",direction = "long") %>%
+  filter(X710!="")
+subfield_list<- str_extract_all(bn_books$X710,"\\%.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+marc_field<-cbind(marc_field,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field$X710 <- str_replace(marc_field$X710,subfield_list_char[i],"|\\1")
+}
+subfield_list_char2 <- str_replace_all(subfield_list,"\\%","\\\\%")
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\%)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field[,i+2] <- ifelse(grepl(subfield_list_char2[i],marc_field$X710),str_replace_all(gsub(string,"\\3",marc_field$X710),"\\%.", "~"),NA)
+}
+bn_institutions_710 <- marc_field %>%
+  mutate(MRC = "710",
+         Entity_Name = `%1`,
+         Related_Entity_Sub_Entity = NA,
+         Related_Entity_Main_Entity = NA,
+         Located_Location = NA,
+         subfield = "%1") %>%
+  select(id,MRC,Entity_Name,Related_Entity_Sub_Entity,Related_Entity_Main_Entity,Located_Location,subfield)
+#field X711
+marc_field <- bn_books %>%
+  select(id,X711)%>%
+  filter(X711!="") %>%
+  cSplit(.,"X711",sep = "|",direction = "long") %>%
+  filter(X711!="")
+subfield_list<- str_extract_all(bn_books$X711,"\\%.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+marc_field<-cbind(marc_field,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field$X711 <- str_replace(marc_field$X711,subfield_list_char[i],"|\\1")
+}
+subfield_list_char2 <- str_replace_all(subfield_list,"\\%","\\\\%")
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\%)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field[,i+2] <- ifelse(grepl(subfield_list_char2[i],marc_field$X711),str_replace_all(gsub(string,"\\3",marc_field$X711),"\\%.", "~"),NA)
+}
+bn_institutions_711 <- marc_field %>%
+  mutate(MRC = "711",
+         Entity_Name = `%1`,
+         Related_Entity_Sub_Entity = NA,
+         Related_Entity_Main_Entity = NA,
+         Located_Location = NA,
+         subfield = "%1") %>%
+  select(id,MRC,Entity_Name,Related_Entity_Sub_Entity,Related_Entity_Main_Entity,Located_Location,subfield)
+#connecting bn institutions
+bn_books_institutions <- rbind(bn_institutions_110,bn_institutions_120,bn_institutions_210,bn_institutions_225,bn_institutions_710,bn_institutions_711)
+
+#cz_books 110, 264, 610, 710, 787(?)
+#field X110
+marc_field <- cz_books %>%
+  select(id,X110)%>%
+  filter(X110!="") %>%
+  cSplit(.,"X110",sep = "|",direction = "long") %>%
+  filter(X110!="")
+marc_field <- mutate(marc_field,
+               indicator = str_replace_all(marc_field$X110,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(cz_books$X110,"\\${2}.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field)[1]))
+colnames(empty_table) <-subfield_list
+marc_field<-cbind(marc_field,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+x <- 1:length(subfield_list)
+for (i in x) {
+  marc_field$X110 <- str_replace(marc_field$X110,subfield_list_char[i],"|\\1")
+  progress(match(i,x), max.value = length(x)) 
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\${2})(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field$X110),str_replace_all(gsub(string,"\\3",marc_field$X110),"\\${2}.", "~"),NA)
+}
+
+#cz_articles 110, 610, 710, 
+
+#pbl_books
+
+```
+
 
 ```{r}
 bn_people_record_id_X701 <- bn_people_record_id_X701 %>%
