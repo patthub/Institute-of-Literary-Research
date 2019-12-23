@@ -15,6 +15,7 @@ bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8
   filter(!grepl("\\$aNadbitki i odbitki",X655)) %>%
   filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="") %>%
   filter(grepl("\\$aWA|\\$aW ",X040)) %>%
+  filter(X655!="\\7$aKomiks$2DBN") %>%
   mutate(licznik = 1:lengths(.))
 
 ### przenieść kolejnych autorów z 700 do pola 100
@@ -84,8 +85,6 @@ bn_ks <- bn_ks %>%
          X700 = drugi_autor$X700)
 
 ##koniec przenosin
-write.csv2(bn_ks, "C:/Users/Cezary/Desktop/bn2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
-bn_ks <- read.csv2("C:/Users/Cezary/Desktop/bn2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
 
 #połączenie z bazą PBL
 jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
@@ -536,18 +535,20 @@ gatunki_podmiotowe <- bn_ok %>%
 gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
 bn_ok$czy_podmiotowy <- grepl(gatunki_podmiotowe,bn_ok$X655)
 bn_ok <- bn_ok %>%
-  mutate(rodzaj_ksiazki = ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE,"podmiotowa",
-                                 ifelse(X100!=""&grepl("aPamiętnik|aLiteratura podróżnicza",X655),"podmiotowa",
-                                        ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655),"podmiotowa",
-                                               ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN"),"podmiotowa",
-                                                      ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))%>%
-  select(1:27,31)
-###nie ma jeszcze współwydania - uzupełnić - prześledzić jak to było wcześniej robione
+  mutate(rodzaj_ksiazki = ifelse(str_count(X245, " / ")+1>2,"antologia",
+                                 ifelse(str_count(X245, " / ")+1==2,"współwydanie",
+                                        ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE,"podmiotowa",
+                                               ifelse(X100!=""&grepl("aPamiętnik|aLiteratura podróżnicza",X655),"podmiotowa",
+                                                      ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655),"podmiotowa",
+                                                             ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN"),"podmiotowa",
+                                                             ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))))%>%
+  select(1:27,rodzaj_ksiazki)
 ```
 
 ```{r wyznaczenie zbioru automatycznie IOK}
 ###TUTAJ###
 IOK_podm <- bn_ok %>%
+  filter(!grepl("\\$t",X700)) %>%
   mutate(#X500 = ifelse(grepl("\\$aTyt[,\\.] oryg",X500),"",as.character(X500)),
          ile_gatunkow = ifelse(rodzaj_ksiazki=="podmiotowa",str_count(X655,"\\$a"),"nie"),
          tylko_podmiotowe = ifelse(str_count(X655,"\\$a")>0&str_count(X655,"\\$a")==str_count(X655,"\\$y")&str_count(X655,"\\$y")!=str_count(X655,"\\$x"),"tak","nie")) %>%
@@ -595,7 +596,7 @@ marc_field_100 <- marc_field_100 %>%
 IOK_podm <- IOK_podm %>%
   full_join(.,marc_field_100,by = "id")
 
-x <- 1:length(test2$id)
+x <- 1:length(IOK_podm$id)
 for (i in x) {
   
   IOK_podm$czy_nazwisko[i] <- grepl(IOK_podm$bn_nazwisko[i],IOK_podm$X245[i])
@@ -689,7 +690,13 @@ IOK_przedm <- IOK_przedm %>%
 
 bn_ok <- bn_ok %>%
   full_join(.,IOK_podm,by = "id") %>%
-  full_join(.,IOK_przedm,by = "id")
+  full_join(.,IOK_przedm,by = "id") %>%
+  mutate(czy_automatycznie = ifelse(!is.na(automatyczna_podmiotowa),"podmiotowa",
+                                    ifelse(!is.na(automatyczna_przedmiotowa),"przedmiotowa","nie"))) %>%
+  select(-automatyczna_podmiotowa,-automatyczna_przedmiotowa) %>%
+  mutate(czy_automatycznie = ifelse(czy_automatycznie=="podmiotowa"&rodzaj_ksiazki!="podmiotowa","nie",as.character(czy_automatycznie)))
+
+write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
 
 
