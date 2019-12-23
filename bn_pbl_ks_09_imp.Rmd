@@ -541,22 +541,22 @@ bn_ok <- bn_ok %>%
                                         ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655),"podmiotowa",
                                                ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN"),"podmiotowa",
                                                       ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))%>%
-  select(1:27,34)
+  select(1:27,31)
+###nie ma jeszcze współwydania - uzupełnić - prześledzić jak to było wcześniej robione
 ```
 
 ```{r wyznaczenie zbioru automatycznie IOK}
 ###TUTAJ###
-test <- bn_ok %>%
+IOK_podm <- bn_ok %>%
   mutate(#X500 = ifelse(grepl("\\$aTyt[,\\.] oryg",X500),"",as.character(X500)),
          ile_gatunkow = ifelse(rodzaj_ksiazki=="podmiotowa",str_count(X655,"\\$a"),"nie"),
-         tylko_podmiotowe = ifelse(str_count(X655,"\\$a")>0&str_count(X655,"\\$a")==str_count(X655,"\\$y"),"tak","nie"))
-
-test2 <- test %>%
+         tylko_podmiotowe = ifelse(str_count(X655,"\\$a")>0&str_count(X655,"\\$a")==str_count(X655,"\\$y")&str_count(X655,"\\$y")!=str_count(X655,"\\$x"),"tak","nie")) %>%
+  filter(str_count(X100,"\\$a")==1) %>%
   filter(!grepl("pseud|nazwa",X500,ignore.case = TRUE)&X501==""&(tylko_podmiotowe=="tak"|ile_gatunkow=="1")&X100!="")
 
 #zestawienie 100 i 245
 #100
-marc_field_100 <- test2 %>%
+marc_field_100 <- IOK_podm %>%
   select(id,X100)%>%
   filter(X100!="") %>%
   mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
@@ -564,7 +564,7 @@ marc_field_100 <- test2 %>%
   filter(X100!="") %>%
   mutate(X100=str_remove_all(X100,"^\\|")) %>%
   mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(test2$X100,"\\$.")
+subfield_list<- str_extract_all(IOK_podm$X100,"\\$.")
 subfield_list<- unique(unlist(subfield_list))
 empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
 colnames(empty_table) <-subfield_list
@@ -592,35 +592,36 @@ marc_field_100 <- marc_field_100 %>%
          bn_imie = ifelse(str_detect(`$a`,","),str_replace(`$a`,"^(.*?)(, )(.*?$)","\\3"),"")) %>%
   select(id,bn_nazwisko,bn_imie)
 
-test2 <- test2 %>%
+IOK_podm <- IOK_podm %>%
   full_join(.,marc_field_100,by = "id")
 
 x <- 1:length(test2$id)
 for (i in x) {
   
-  test2$czy_nazwisko[i] <- grepl(test2$bn_nazwisko[i],test2$X245[i])
-  test2$czy_imie[i] <- grepl(test2$bn_imie[i],test2$X245[i])
+  IOK_podm$czy_nazwisko[i] <- grepl(IOK_podm$bn_nazwisko[i],IOK_podm$X245[i])
+  IOK_podm$czy_imie[i] <- grepl(IOK_podm$bn_imie[i],IOK_podm$X245[i])
   
 }
-test2 <- test2 %>%
+#usunięcie tych, które nie mają tytułów oryginalnych
+IOK_podm <- IOK_podm %>%
   filter(czy_nazwisko==1&czy_imie==1&!grepl("et al\\.",X245)) %>%
+  select(-bn_nazwisko,-bn_imie,-czy_nazwisko,-czy_imie) %>%
+  unique() %>%
   mutate(jezyk = str_extract(X041,("(?<=\\$h)(...)"))) %>%
   mutate(czy_tytul_obcy = ifelse(is.na(jezyk),"nie dotyczy",
                                  ifelse(!grepl("pol",jezyk),
                                         ifelse(X246!="","ok",
-                                               ifelse(grepl("Tyt[,\\.] oryg",X501),"ok","problem")),"nie dotyczy")))
-###usunąć te, które nie mają tytułów oryginalnych
-count <- as.data.frame(table(test2$czy_tytul_obcy))
-  
-###
+                                               ifelse(grepl("Tyt[,\\.] oryg",X501)|grepl("Tyt[,\\.] oryg",X500),"ok","problem")),"nie dotyczy"))) %>%
+  filter(czy_tytul_obcy!="problem") %>%
+  select(id) %>%
+  mutate(automatyczna_podmiotowa = "tak")
+###tutaj kończą się automatyczne podmiotowe
 
-test3 <- bn_ok %>%
-  select(X546) %>%
-  unique()
-
-# przedmiotowe; osoba z PBL jako temat
+#automatyczny IOK dla przedmiotowych; osoba z PBL jako temat
 #600
-marc_field_600 <- bn_ok %>%
+IOK_przedm <- bn_ok %>%
+  filter(str_count(X600,"\\$a")==1)
+marc_field_600 <- IOK_przedm %>%
   select(id,X600)%>%
   filter(X600!="") %>%
   mutate(X600=str_replace_all(X600,"(^|\\|)","~\\1")) %>%
@@ -628,7 +629,7 @@ marc_field_600 <- bn_ok %>%
   filter(X600!="") %>%
   mutate(X600=str_remove_all(X600,"^\\|")) %>%
   mutate(indicator = str_replace_all(X600,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(bn_ok$X600,"\\$.")
+subfield_list<- str_extract_all(IOK_przedm$X600,"\\$.")
 subfield_list<- unique(unlist(subfield_list))
 empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_600)[1]))
 colnames(empty_table) <-subfield_list
@@ -675,19 +676,20 @@ bn_records_pbl_people_id <- bn_records_pbl_people %>%
   unique() %>%
   filter(!grepl("~",tworca_pbl))
 
-test_przedm <- bn_ok %>%
+IOK_przedm <- IOK_przedm %>%
   full_join(.,bn_records_pbl_people_id,by = "id") %>%
   filter(rodzaj_ksiazki=="przedmiotowa"&X600!=""&str_count(X600,"\\$a")==1&!is.na(tworca_pbl)) %>%
   mutate(czy_o_czyms = str_detect(X655,"\\$x"))
-test_przedm$czy_gatunek <- grepl(gatunki_podmiotowe,test_przedm$X655)
-test_przedm2 <- test_przedm %>%
+IOK_przedm$czy_gatunek <- grepl(gatunki_podmiotowe,IOK_przedm$X655)
+IOK_przedm <- IOK_przedm %>%
   filter((grepl("tematyka|biografia|historia",X655,ignore.case = TRUE)|czy_o_czyms==TRUE)&!grepl("Księga pamiątkowa",X655)) %>%
-  filter(grepl("((a|:)(821))|(791)",X080))
+  filter(grepl("((a|:)(821))|(791)",X080)) %>%
+  select(id) %>%
+  mutate(automatyczna_przedmiotowa = "tak")
 
-###
-count <- as.data.frame(table(test$ile_gatunkow))
-  
-
+bn_ok <- bn_ok %>%
+  full_join(.,IOK_podm,by = "id") %>%
+  full_join(.,IOK_przedm,by = "id")
 ```
 
 
