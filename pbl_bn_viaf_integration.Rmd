@@ -6,18 +6,114 @@ output: html_notebook
 #biblioteki
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,rvest,RSelenium,jsonlite)
+pacman::p_load(zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,rvest,RSelenium,jsonlite)
 #połączenie z bazą PBL
-#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
-#jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
 jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+```
 
-#pbl_tworcy <- read.csv2("C:/Users/User/Desktop/tworcy_pbl.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE, sep = ",")
+```{r nowe podejście}
+#najpierw trzeba zbudować listę wielokrotnego wyboru, a dopiero potem szukać szczegółowych informacji (czyli będą dwie)
+#wczytanie twórców pbl
 pbl_tworcy <- dbGetQuery(PBL,
                             "select *
-                            from pbl_tworcy tw")
+                            from pbl_tworcy tw") %>%
+  select(TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE)
+#tworzenie pustej tabeli
+wzorcowe_bn <- data.frame(stringsAsFactors=FALSE)
+x <- 1:length(pbl_tworcy$TW_TWORCA_ID)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  url_1 <- "http://data.bn.org.pl/api/authorities.json?limit=100&name="
+  url_2 <- tolower(str_replace_all(pbl_tworcy$TW_NAZWISKO," ", "+"))[1796]
+  url_3 <- "+"
+  url_4 <- tolower(str_replace_all(pbl_tworcy$TW_IMIE," ","+"))[1796]
+  url <- as.character(paste(url_1,url_2,url_3,url_4,sep = ""))
+  tryCatch({
+    bn <- jsonlite::fromJSON(url) %>% .$authorities %>%
+    filter(title=="") %>%
+    select(bn_id=id,bn_name=name)
+    }, error=function(e){
+                        bn <<- data.frame(bn_id = "brak danych (CR)", bn_name = "brak danych (CR)")
+    })
+  iteration <- cbind(pbl_tworcy %>% slice(i), bn)
+  wzorcowe_bn <- rbind(wzorcowe_bn,iteration)
+}
 
+###problemy z Balzacem Honore (bez akcentu nie wyszukuje, a z akcentem tak - co zrobić?)
+write.csv2(wzorcowe_bn, file = "C:/Users/Cezary/Desktop/tworcy_pbl_wzorcowe_bn.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+    
+    
+    
+aaa <- pbl_tworcy %>% slice(1)
+    
+    
+  
+  bn_name <- paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(url) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(url) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\.+)"," \\2"),sep = "|")
+  viaf <- str_remove_all(paste(unlist(jsonlite::fromJSON(url) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields),collapse = "|"),"(\\|NA)|(\\|viaf)")
+  
+  
+  
+  
+link <- "https://data.bn.org.pl/api/authorities.json?limit=100&name=Kindler%C3%B3wna+maria"
+
+  tryCatch({
+    bn <- jsonlite::fromJSON(link) %>% .$authorities %>%
+    filter(title=="") %>%
+    select(bn_id=id,bn_name=name)
+    }, error=function(e){
+                        bn$bn_id <<- "brak danych (CR)"
+                        bn$bn_name <<- "brak danych (CR)"
+    })
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  tryCatch({
+    remDr$navigate(url)
+  webElem <- remDr$findElement(using = 'css selector', "body:nth-child(2) > pre:nth-child(1)")
+  json_text <- webElem$getElementText()
+  json_text <- as.character(json_text)
+  }, error=function(e){
+                   json_text <<- "brak danych CR"
+})
+  iteration <- cbind(pbl_tworcy$TW_TWORCA_ID[i], pbl_tworcy$TW_NAZWISKO[i], pbl_tworcy$TW_IMIE[i], json_text)
+  wzorcowe_bn <- rbind(wzorcowe_bn,iteration)
+}
+
+
+
+############################
+
+pbl_viaf <- data.frame(stringsAsFactors=FALSE)
+x <- 1:length(pbl_tworcy$TW_TWORCA_ID)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  tryCatch({
+  name <- paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\.+)"," \\2"),sep = "|")
+  viaf <- str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",pbl_bn_viaf$id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields),collapse = "|"),"(\\|NA)|(\\|viaf)")
+  }, error=function(e){
+                     name <<- "brak danych (CR)"
+                     viaf <<- "brak danych (CR)"
+  })
+  iteration <- data.frame(id = pbl_bn_viaf$id[i], name = name, viaf = viaf)
+  pbl_viaf <- rbind(pbl_viaf,iteration)
+}
+write.csv2(pbl_viaf, file = "C:/Users/Cezary/Desktop/pbl_bn_viaf.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+
+```
+
+
+```{r}
 #tworzenie pustej tabeli
 wzorcowe_bn <- data.frame(pbl_id = character(), pbl_nazwisko = character(), pbl_imie = character(), bn_json = character(), stringsAsFactors=FALSE)
 #pętla for
