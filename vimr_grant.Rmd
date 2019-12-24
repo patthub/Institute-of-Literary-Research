@@ -12,8 +12,13 @@ library(jsonlite)
 library(lubridate)
 options(stringsAsFactors = FALSE)
 library(tidyverse)
+library(viafr)
 url  <- "http://www.viaf.org"
 path <- "eurlex/directory_code"
+
+test <- viafr::viaf_search(personalNames = "balzac honore de")
+test <- viafr::viaf_suggest("balzac", local.sources = "plwabn") %>% `[[`(1)
+
 
 
 
@@ -58,7 +63,7 @@ viaf_suggest <- function(query = NULL){
 kundera <- viaf_get("51691735")
 
 
-test <- viaf_suggest("ondrej vimr")
+test <- viaf_suggest("balzac honore de")
 test <- data.frame(test)
 ```
 
