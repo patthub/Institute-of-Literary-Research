@@ -13,14 +13,13 @@ library(lubridate)
 options(stringsAsFactors = FALSE)
 library(tidyverse)
 library(viafr)
+library(XML)
 url  <- "http://www.viaf.org"
 path <- "eurlex/directory_code"
 
 test <- viafr::viaf_search(personalNames = "balzac honore de")
-test <- viafr::viaf_suggest("balzac", local.sources = "plwabn") %>% `[[`(1)
-
-
-
+test <- as.character(viafr::viaf_suggest("balzac") %>% `[[`(1) %>% select(1) %>% slice(1))
+test <- viafr::viaf_get(test)
 
 
 tt_GET <- function(path, ...){

@@ -6,7 +6,7 @@ output: html_notebook
 #biblioteki
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-pacman::p_load(zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,rvest,RSelenium,jsonlite)
+pacman::p_load(zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,rvest,RSelenium,jsonlite,XML,viafr)
 #połączenie z bazą PBL
 jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
@@ -34,7 +34,23 @@ for (i in x) {
     filter(title=="") %>%
     select(bn_id=id,bn_name=name)
     }, error=function(e){
-                        bn <<- data.frame(bn_id = "brak danych (CR)", bn_name = "brak danych (CR)")
+      #browser
+      #list_versions("chromedriver")
+      rD <- rsDriver(port=4444L,browser="chrome", chromever="78.0.3904.11")
+      remDr <- rD$client
+      page <- "https://viaf.org/"
+      remDr$navigate(page)
+      sbox <- remDr$findElement(using = 'css selector', "#searchTerms")
+      sbox$sendKeysToElement(list("balzac honore de"))
+      enter <- remDr$findElement(using = 'css selector', "#btnSearch2")
+      enter$clickElement()
+      result_page <- remDr$findElement(using = 'css selector', 'div.inner table:nth-child(2) tbody:nth-child(1) tr:nth-child(2) td.recName > a:nth-child(1)')
+      result_page$clickElement()
+      viaf_number <- str_replace(as.character(remDr$getCurrentUrl()),"(.*?)(\\d+)(\\/#.*$)","\\2")
+      url <- paste("https://data.bn.org.pl/api/authorities.json?limit=100&marc=024a+",viaf_number,sep = "")
+      bn <<- jsonlite::fromJSON(url) %>% .$authorities %>%
+      filter(title=="") %>%
+      select(bn_id=id,bn_name=name)
     })
   iteration <- cbind(pbl_tworcy %>% slice(i), bn)
   wzorcowe_bn <- rbind(wzorcowe_bn,iteration)
