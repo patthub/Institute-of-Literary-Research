@@ -18,7 +18,8 @@ PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "I
 pbl_tworcy <- dbGetQuery(PBL,
                             "select *
                             from pbl_tworcy tw") %>%
-  select(TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE)
+  select(TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE) %>%
+  arrange(TW_TWORCA_ID)
 #tworzenie pustej tabeli
 wzorcowe_bn <- data.frame(stringsAsFactors=FALSE)
 x <- 1:length(pbl_tworcy$TW_TWORCA_ID)
