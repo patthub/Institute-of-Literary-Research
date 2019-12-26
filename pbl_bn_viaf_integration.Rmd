@@ -20,29 +20,51 @@ pbl_tworcy <- dbGetQuery(PBL,
                             from pbl_tworcy tw") %>%
   select(TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE) %>%
   arrange(TW_TWORCA_ID)
+##
+#browser
+#list_versions("chromedriver")
+rD <- rsDriver(port=4444L,browser="chrome", chromever="78.0.3904.11")
+remDr <- rD$client
+page <- "https://viaf.org/"
 #tworzenie pustej tabeli
 wzorcowe_bn <- data.frame(stringsAsFactors=FALSE)
 x <- 1:length(pbl_tworcy$TW_TWORCA_ID)
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
   url_1 <- "http://data.bn.org.pl/api/authorities.json?limit=100&name="
-  url_2 <- tolower(str_replace_all(pbl_tworcy$TW_NAZWISKO," ", "+"))[1796]
+  url_2 <- tolower(str_replace_all(pbl_tworcy$TW_NAZWISKO," ", "+"))[i]
   url_3 <- "+"
-  url_4 <- tolower(str_replace_all(pbl_tworcy$TW_IMIE," ","+"))[1796]
+  url_4 <- tolower(str_replace_all(pbl_tworcy$TW_IMIE," ","+"))[i]
   url <- as.character(paste(url_1,url_2,url_3,url_4,sep = ""))
   tryCatch({
     bn <- jsonlite::fromJSON(url) %>% .$authorities %>%
     filter(title=="") %>%
-    select(bn_id=id,bn_name=name)
-    }, error=function(e){
-      #browser
-      #list_versions("chromedriver")
-      rD <- rsDriver(port=4444L,browser="chrome", chromever="78.0.3904.11")
-      remDr <- rD$client
-      page <- "https://viaf.org/"
+      select(bn_id=id,bn_name=name)
+  if (length(bn$bn_id)>0) {
+    bn <- jsonlite::fromJSON(url) %>% .$authorities %>%
+    filter(title=="") %>%
+    select(bn_id=id,bn_name=name) %>%
+      mutate(skad = "BN")
+  } else {
+  remDr$navigate(page)
+      sbox <- remDr$findElement(using = 'css selector', "#searchTerms")
+      sbox$sendKeysToElement(list(paste(pbl_tworcy$TW_NAZWISKO[i],pbl_tworcy$TW_IMIE[i],sep = " ")))
+      enter <- remDr$findElement(using = 'css selector', "#btnSearch2")
+      enter$clickElement()
+      result_page <- remDr$findElement(using = 'css selector', 'div.inner table:nth-child(2) tbody:nth-child(1) tr:nth-child(2) td.recName > a:nth-child(1)')
+      result_page$clickElement()
+      viaf_number <- str_replace(as.character(remDr$getCurrentUrl()),"(.*?)(\\d+)(\\/#.*$)","\\2")
+      url <- paste("https://data.bn.org.pl/api/authorities.json?limit=100&marc=024a+",viaf_number,sep = "")
+      bn <- jsonlite::fromJSON(url) %>% .$authorities %>%
+      filter(title=="") %>%
+      select(bn_id=id,bn_name=name) %>%
+        mutate(skad = "VIAF")
+  }
+  }, error=function(e){
+    tryCatch({
       remDr$navigate(page)
       sbox <- remDr$findElement(using = 'css selector', "#searchTerms")
-      sbox$sendKeysToElement(list("balzac honore de"))
+      sbox$sendKeysToElement(list(paste(pbl_tworcy$TW_NAZWISKO[i],pbl_tworcy$TW_IMIE[i],sep = " ")))
       enter <- remDr$findElement(using = 'css selector', "#btnSearch2")
       enter$clickElement()
       result_page <- remDr$findElement(using = 'css selector', 'div.inner table:nth-child(2) tbody:nth-child(1) tr:nth-child(2) td.recName > a:nth-child(1)')
@@ -51,12 +73,16 @@ for (i in x) {
       url <- paste("https://data.bn.org.pl/api/authorities.json?limit=100&marc=024a+",viaf_number,sep = "")
       bn <<- jsonlite::fromJSON(url) %>% .$authorities %>%
       filter(title=="") %>%
-      select(bn_id=id,bn_name=name)
+      select(bn_id=id,bn_name=name) %>%
+        mutate(skad = "VIAF")
+    }, error=function(f){
+                        bn <<- data.frame(bn_id = "brak danych (CR)", bn_name = "brak danych (CR)", skad = "brak danych (CR)")
     })
+    })
+
   iteration <- cbind(pbl_tworcy %>% slice(i), bn)
   wzorcowe_bn <- rbind(wzorcowe_bn,iteration)
 }
-
 ###problemy z Balzacem Honore (bez akcentu nie wyszukuje, a z akcentem tak - co zrobić?)
 write.csv2(wzorcowe_bn, file = "C:/Users/Cezary/Desktop/tworcy_pbl_wzorcowe_bn.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
     
