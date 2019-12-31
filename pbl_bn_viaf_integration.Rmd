@@ -15,19 +15,30 @@ PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "I
 ```{r nowe podejście}
 #najpierw trzeba zbudować listę wielokrotnego wyboru, a dopiero potem szukać szczegółowych informacji (czyli będą dwie)
 #wczytanie twórców pbl
+library(svMisc)
+library(tidyverse)
+library(RSelenium)
+library(dplyr)
+library(stringr)
+library(jsonlite)
 pbl_tworcy <- dbGetQuery(PBL,
                             "select *
                             from pbl_tworcy tw") %>%
   select(TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE) %>%
-  arrange(TW_TWORCA_ID)
+  arrange(TW_TWORCA_ID) 
+pbl_tworcy <- wzorcowe_bn %>%
+  filter(skad=="brak danych (CR)") %>%
+  arrange(TW_TWORCA_ID) %>%
+    select(1:3)
+count <- as.data.frame(table(wzorcowe_bn$skad))
 ##
 #browser
 #list_versions("chromedriver")
-rD <- rsDriver(port=4444L,browser="chrome", chromever="78.0.3904.11")
+rD <- rsDriver(port=4444L,browser="chrome", chromever="79.0.3945.36")
 remDr <- rD$client
 page <- "https://viaf.org/"
 #tworzenie pustej tabeli
-wzorcowe_bn <- data.frame(stringsAsFactors=FALSE)
+wzorcowe_bn <- data.frame(TW_TWORCA_ID = as.integer(),TW_NAZWISKO = as.character(), TW_IMIE = as.character(), bn_id = as.character(), bn_name = as.character(), skad = as.character(), stringsAsFactors=FALSE)
 x <- 1:length(pbl_tworcy$TW_TWORCA_ID)
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
@@ -47,6 +58,8 @@ for (i in x) {
       mutate(skad = "BN")
   } else {
   remDr$navigate(page)
+    lista_wyboru <- remDr$findElement(using = 'css selector', "div.yui-skin-sam form:nth-child(1) fieldset:nth-child(1) select:nth-child(2) > option:nth-child(5)")
+      lista_wyboru$clickElement()
       sbox <- remDr$findElement(using = 'css selector', "#searchTerms")
       sbox$sendKeysToElement(list(paste(pbl_tworcy$TW_NAZWISKO[i],pbl_tworcy$TW_IMIE[i],sep = " ")))
       enter <- remDr$findElement(using = 'css selector', "#btnSearch2")
@@ -63,6 +76,8 @@ for (i in x) {
   }, error=function(e){
     tryCatch({
       remDr$navigate(page)
+      lista_wyboru <- remDr$findElement(using = 'css selector', "div.yui-skin-sam form:nth-child(1) fieldset:nth-child(1) select:nth-child(2) > option:nth-child(5)")
+      lista_wyboru$clickElement()
       sbox <- remDr$findElement(using = 'css selector', "#searchTerms")
       sbox$sendKeysToElement(list(paste(pbl_tworcy$TW_NAZWISKO[i],pbl_tworcy$TW_IMIE[i],sep = " ")))
       enter <- remDr$findElement(using = 'css selector', "#btnSearch2")
@@ -74,7 +89,8 @@ for (i in x) {
       bn <<- jsonlite::fromJSON(url) %>% .$authorities %>%
       filter(title=="") %>%
       select(bn_id=id,bn_name=name) %>%
-        mutate(skad = "VIAF")
+        mutate(skad = "VIAF") %>%
+        mutate(bn_id = as.character(bn_id))
     }, error=function(f){
                         bn <<- data.frame(bn_id = "brak danych (CR)", bn_name = "brak danych (CR)", skad = "brak danych (CR)")
     })
@@ -84,7 +100,7 @@ for (i in x) {
   wzorcowe_bn <- rbind(wzorcowe_bn,iteration)
 }
 ###problemy z Balzacem Honore (bez akcentu nie wyszukuje, a z akcentem tak - co zrobić?)
-write.csv2(wzorcowe_bn, file = "C:/Users/Cezary/Desktop/tworcy_pbl_wzorcowe_bn.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(wzorcowe_bn, file = "C:/Users/User/Desktop/tworcy_pbl_wzorcowe_b4_z_id.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
     
     
     
