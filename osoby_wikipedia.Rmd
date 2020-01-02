@@ -1,0 +1,99 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+#biblioteki
+options(java.parameters = "-Xmx32000m")
+options(scipen = 999)
+pacman::p_load(RSelenium,utf8,googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,jsonlite)
+
+pbl_viaf <- sheets_read(ss = "1cEz73dGN2r2-TTc702yne9tKfH9PQ6UyAJ2zBSV6Jb0") %>%
+  filter(czy_ten_sam!="nie") %>%
+  select(pbl_id, BN_id, BN_name) %>%
+  mutate(name = str_replace_all(BN_name,"\\|\\(", " ("),
+         name = str_replace_all(BN_name, "\\;\\|", "; ")) %>%
+  cSplit(.,"BN_name",sep = "|",direction = "long") %>%
+  filter(BN_name!="")
+
+pbl_viaf_2 <- read.csv2("C:/Users/Cezary/Desktop/pbl_bn_drugi_plik.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+
+#połączenie z bazą PBL
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
+```
+
+```{r}
+pbl_viaf <- pbl_viaf %>%
+  filter(czy_ten_sam!="nie") %>%
+  select(TW_TWORCA_ID=pbl_id, TW_NAZWISKO=pbl_nazwisko,TW_IMIE=pbl_imie,pbl_lata,bn_id=BN_id, bn_name=BN_name,czy_ten_sam)
+pbl_viaf_2 <- pbl_viaf_2 %>%
+  select(names(pbl_viaf))
+pbl_viaf <- rbind(pbl_viaf,pbl_viaf_2)
+
+pbl_viaf <- pbl_viaf %>%
+  filter(!is.na(bn_id))
+
+PBL_tworcy <- dbReadTable(PBL,'PBL_TWORCY') %>%
+  select(TW_TWORCA_ID,TW_LICZBA_ZAPISOW)
+pbl_viaf <- pbl_viaf %>%
+  left_join(.,PBL_tworcy,by="TW_TWORCA_ID")
+
+pbl_viaf <- pbl_viaf %>%
+  left_join(.,count2,by=c("bn_id"="Var1"))
+
+pbl_viaf <- pbl_viaf %>%
+  select(-Freq)
+
+pbl_viaf <- merge(pbl_viaf,count2,by.x = "bn_id",by.y = "Var1",all.x = TRUE)
+  
+names(pbl_viaf)
+count <- as.data.frame(table(pbl_viaf$Freq))
+count2 <- as.data.frame(table(pbl_viaf$bn_id))
+class(pbl_viaf$bn_id)
+class(count2$Var1)
+
+write.csv2(pbl_viaf, "C:/Users/Cezary/Desktop/bn_pbl_osoby.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+write.csv2(count2, "C:/Users/Cezary/Desktop/count.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+```
+
+```{r}
+ostatnie_osoby <- read.csv2("C:/Users/Cezary/Desktop/ostatnie osoby.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) %>%
+  filter(TW_LICZBA_ZAPISOW>1)
+#skrobanie z google
+rD <- rsDriver(port=4444L,browser="chrome", chromever="79.0.3945.36")
+remDr <- rD$client
+page <- "https://www.google.com/"
+#tworzenie pustej tabeli
+wzorcowe_bn <- data.frame(TW_TWORCA_ID = as.integer(),TW_NAZWISKO = as.character(), TW_IMIE = as.character(), stringsAsFactors=FALSE)
+x <- 1:length(ostatnie_osoby$TW_TWORCA_ID)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  tryCatch({
+    remDr$navigate(page)
+    wyszukanie <- remDr$findElement(using = 'xpath', "//input[@name='q']")
+    wyszukanie$sendKeysToElement(list(str_remove_all(paste(ostatnie_osoby$TW_NAZWISKO[i],ostatnie_osoby$TW_IMIE[i], "wikipedia", sep = " "),"\\*")))
+    wyszukanie$sendKeysToElement(sendKeys = list(key = "enter"))
+    rekord <- remDr$findElement(using = 'partial link text', "Wikipedia")
+    rekord$clickElement()
+    viaf <- remDr$findElement(using = 'link text', 'VIAF')
+    viaf$sendKeysToElement(sendKeys = list(key = "tab", key = "enter"))
+    viaf_number <- str_replace(as.character(remDr$getCurrentUrl()),"(.*?)(\\d+)(.*?$)","\\2")
+      url <- paste("https://data.bn.org.pl/api/authorities.json?limit=100&marc=024a+",viaf_number,sep = "")
+      bn <- jsonlite::fromJSON(url) %>% .$authorities %>%
+      filter(title=="") %>%
+      select(bn_id=id,bn_name=name) %>%
+        mutate(skad = "VIAF")
+
+    }, error=function(e){
+                          bn <<- data.frame(bn_id = "brak danych (CR)", bn_name = "brak danych (CR)", skad = "brak danych (CR)")
+      })
+  iteracja <- cbind(ostatnie_osoby %>% slice(i) %>% select(1:3), bn)
+  wzorcowe_bn <- rbind(wzorcowe_bn,iteracja)
+}
+class(ostatnie_osoby$TW_NAZWISKO)
+```
+
