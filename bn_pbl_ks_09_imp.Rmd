@@ -162,10 +162,21 @@ gatunki_tfrtv <- rbind(gatunki_tfrtvX655,gatunki_tfrtvX650) %>%
 pbl_viaf <- sheets_read(ss = "1cEz73dGN2r2-TTc702yne9tKfH9PQ6UyAJ2zBSV6Jb0") %>%
   filter(czy_ten_sam!="nie") %>%
   select(pbl_id, BN_id, BN_name) %>%
-  mutate(name = str_replace_all(BN_name,"\\|\\(", " ("),
-         name = str_replace_all(BN_name, "\\;\\|", "; ")) %>%
+  mutate(BN_name = str_replace_all(BN_name,"\\|\\(", " ("),
+         BN_name = str_replace_all(BN_name, "\\;\\|", "; ")) %>%
   cSplit(.,"BN_name",sep = "|",direction = "long") %>%
   filter(BN_name!="")
+pbl_viaf2 <- sheets_read(ss = "1_Bhwzo0xu4yTn8tF0ZNAZq9iIAqIxfcrjeLVCm_mggM") %>%
+  filter(czy_ten_sam!="nie") %>%
+  select(pbl_id, BN_id, BN_name) %>%
+  mutate(BN_name = str_replace_all(BN_name,"\\|\\(", " ("),
+         BN_name = str_replace_all(BN_name, "\\;\\|", "; ")) %>%
+  cSplit(.,"BN_name",sep = "|",direction = "long") %>%
+  filter(BN_name!="")
+pbl_viaf <- rbind(pbl_viaf,pbl_viaf2) %>%
+  arrange(pbl_id) %>%
+  unique()
+remove(pbl_viaf2)
 
 #listy nazwisk BN ze zbioru
 #100
