@@ -13,12 +13,12 @@ output:
 ```{r BN marc processing to table}
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-pacman::p_load(plyr,stringr,tidyverse,reshape2,zoo,sqldf,splitstackshape,dplyr,svMisc,googlesheets)
+pacman::p_load(plyr,stringr,tidyverse,reshape2,zoo,sqldf,splitstackshape,dplyr,svMisc,googlesheets4)
 
 #1
 data_full <- data.frame()
 x <- 1:11
-
+i <- 1
 #download database in pieces
 for (i in x) {
 progress(match(i,x), max.value = length(x))
@@ -40,6 +40,14 @@ data1 <- data1 %>%
   fill(id) %>%
   fill(id,.direction = "up") %>%
   ungroup() %>%
+  ##wydobycie danych dla konkretnego roku ========== trzeba ręcznie zdefiniować rok
+  #mutate(rok = ifelse(grepl("^\\=008",bn1),str_sub(bn1,14,17),NA)) %>%
+  #group_by(row) %>%
+  #fill(rok) %>%
+  #fill(rok,.direction = "up") %>%
+  #ungroup() %>%
+  #filter(rok == 2019) %>%#TUTAJ
+  #select(-rok) %>%
   select(-2,-3) %>%
   mutate(field = str_replace_all(bn1, "(=)(\\w{3})(.*)", "\\2"),
          content = str_replace_all(bn1,"(=)(\\w{3})(\\s{2})(.*)","\\4")) %>%

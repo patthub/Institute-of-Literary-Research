@@ -61,8 +61,19 @@ write.csv2(count2, "C:/Users/Cezary/Desktop/count.csv", row.names = F, na = '', 
 ```
 
 ```{r}
-ostatnie_osoby <- read.csv2("C:/Users/Cezary/Desktop/ostatnie osoby.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) %>%
+options(java.parameters = "-Xmx32000m")
+options(scipen = 999)
+library(svMisc)
+library(tidyverse)
+library(RSelenium)
+library(dplyr)
+library(stringr)
+library(jsonlite)
+ostatnie_osoby <- read.csv2("C:/Users/User/Desktop/ostatnie osoby.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) %>%
   filter(TW_LICZBA_ZAPISOW>1)
+ostatnie_osoby <- ostatnie_osoby %>%
+  slice(1290:length(TW_TWORCA_ID))
+
 #skrobanie z google
 rD <- rsDriver(port=4444L,browser="chrome", chromever="79.0.3945.36")
 remDr <- rD$client
@@ -94,6 +105,6 @@ for (i in x) {
   iteracja <- cbind(ostatnie_osoby %>% slice(i) %>% select(1:3), bn)
   wzorcowe_bn <- rbind(wzorcowe_bn,iteracja)
 }
-class(ostatnie_osoby$TW_NAZWISKO)
+write.csv2(wzorcowe_bn, file = "C:/Users/User/Desktop/tworcy_wikipedia2.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
 
