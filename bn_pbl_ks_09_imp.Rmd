@@ -178,6 +178,23 @@ pbl_viaf <- rbind(pbl_viaf,pbl_viaf2) %>%
   unique()
 remove(pbl_viaf2)
 
+#zostawić do testowania, czy jedno hasło bn nie zasila kilku haseł twórców pbl
+#pbl_viaf <- sheets_read(ss = "1cEz73dGN2r2-TTc702yne9tKfH9PQ6UyAJ2zBSV6Jb0") %>%
+#  filter(czy_ten_sam!="nie") %>%
+#  select(pbl_id, BN_id, BN_name)
+#pbl_viaf2 <- sheets_read(ss = "1_Bhwzo0xu4yTn8tF0ZNAZq9iIAqIxfcrjeLVCm_mggM") %>%
+#  filter(czy_ten_sam!="nie") %>%
+#  select(pbl_id, BN_id, BN_name)
+#pbl_viaf <- rbind(pbl_viaf,pbl_viaf2) %>%
+#  arrange(pbl_id) %>%
+#  unique()
+#
+#count <- as.data.frame(table(pbl_viaf$BN_id))
+#pbl_viaf <- merge(pbl_viaf,count,by.x = "BN_id",by.y = "Var1",all.x = TRUE)
+#pbl_viaf <- pbl_viaf %>%
+#  unique()
+#count2 <- as.data.frame(table(pbl_viaf$pbl_id))
+
 #listy nazwisk BN ze zbioru
 #100
 marc_field_100 <- bn_ks %>%
@@ -520,7 +537,6 @@ reszta <- sqldf("select *
                where a.id not in 
                (select b.id
                from bn_ok b)")
-###TUTAJ###
 ```
 
 
@@ -553,7 +569,7 @@ bn_ok <- bn_ok %>%
                                                       ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655),"podmiotowa",
                                                              ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN"),"podmiotowa",
                                                              ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))))%>%
-  select(1:27,rodzaj_ksiazki)
+  select(1:28,rodzaj_ksiazki)
 ```
 
 ```{r wyznaczenie zbioru automatycznie IOK}
@@ -707,10 +723,13 @@ bn_ok <- bn_ok %>%
   select(-automatyczna_podmiotowa,-automatyczna_przedmiotowa) %>%
   mutate(czy_automatycznie = ifelse(czy_automatycznie=="podmiotowa"&rodzaj_ksiazki!="podmiotowa","nie",as.character(czy_automatycznie)))
 
-write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+count <- as.data.frame(table(bn_ok$dziedzina_PBL,bn_ok$rodzaj_ksiazki))
+colnames(count) <- c("dziedzina","czy automatycznie","ile")
+
+#write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
 
-```{wczytanie gotowego przetworzonego pliku BN}
+```{r wczytanie gotowego przetworzonego pliku BN}
 bn_ok <- read.csv2("C:/Users/Cezary/Downloads/bn_ok_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
 ```
 
