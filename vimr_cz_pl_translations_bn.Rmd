@@ -8,10 +8,8 @@ options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
 pacman::p_load(plyr,stringr,tidyverse,reshape2,zoo,sqldf,splitstackshape,dplyr,svMisc,googlesheets4)
 
-#1
 data_full <- data.frame()
-x <- 1:11
-i <- 1
+x <- 1:34
 #download database in pieces
 for (i in x) {
 progress(match(i,x), max.value = length(x))
@@ -80,6 +78,6 @@ if (length(data1$id)>0) {
   data_full <- rbind(data_full,data1)
 } else {}
 }
-bn1 <- dcast(data_full, id ~ field, value.var="content")
-write.csv2(data_full, file = "C:/Users/User/Desktop/vimr_translations.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+data_full_table <- dcast(data_full, id ~ field, value.var="content")
+write.csv2(data_full_table, file = "C:/Users/User/Desktop/vimr_translations.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
