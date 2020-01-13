@@ -195,6 +195,33 @@ remove(pbl_viaf2)
 #  unique()
 #count2 <- as.data.frame(table(pbl_viaf$pbl_id))
 
+bn_ok <- bn_ok %>%
+  mutate(czy_osoba = ifelse(is.na(osoba_pbl_dzial_id_name),"nie","tak"))
+
+count <- as.data.frame(table(bn_ok$dziedzina_PBL))
+
+count <- as.data.frame(table(bn_ok$czy_automatycznie, bn_ok$rodzaj_ksiazki, bn_ok$dziedzina_PBL)) %>%
+  filter(Var1 == "nie"&Var2=="przedmiotowa")
+
+test <- bn_ok %>%
+  filter(czy_automatycznie=="nie"&rodzaj_ksiazki=="przedmiotowa"&dziedzina_PBL=="bez_ukd_PBL") %>%
+  select(X100,X080,X245,X600,X650,X655,czy_osoba) %>%
+  mutate(kategorie_literackie = ifelse(grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X650,ignore.case = TRUE)|grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X655, ignore.case = TRUE),"tak","nie")) %>%
+  filter(kategorie_literackie=="nie") %>%
+  mutate(lata = ifelse(grepl("\\d{2}-",X100),str_replace(X100,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA),
+         lata_temat = ifelse(grepl("\\d{2}-",X600),str_replace(X600,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA)) %>%
+filter((is.na(lata)&is.na(lata_temat))|!(as.integer(lata)<1800)|!(as.integer(lata_temat)<1800))
+#filter(as.integer(lata)<1800|as.integer(lata_temat)<1800)
+
+count <- as.data.frame(table(bn_ok$rodzaj_ksiazki))
+
+test2 <- bn_ok %>%
+  filter(dziedzina_PBL == "ukd_pogranicze") %>%
+  select(X100,X245,X600,X650,X655,czy_osoba)
+
+test <- test %>%
+  mutate(kategorie_literackie = ifelse(grepl("poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X650,ignore.case = TRUE)|grepl("poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X655, ignore.case = TRUE),"tak","nie"))
+
 #listy nazwisk BN ze zbioru
 #100
 marc_field_100 <- bn_ks %>%
@@ -728,6 +755,11 @@ colnames(count) <- c("dziedzina","czy automatycznie","ile")
 
 #write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
+
+```{r automatyczne działowanie}
+
+```
+
 
 ```{r wczytanie gotowego przetworzonego pliku BN}
 bn_ok <- read.csv2("C:/Users/Cezary/Downloads/bn_ok_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
