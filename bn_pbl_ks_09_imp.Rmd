@@ -195,33 +195,6 @@ remove(pbl_viaf2)
 #  unique()
 #count2 <- as.data.frame(table(pbl_viaf$pbl_id))
 
-bn_ok <- bn_ok %>%
-  mutate(czy_osoba = ifelse(is.na(osoba_pbl_dzial_id_name),"nie","tak"))
-
-count <- as.data.frame(table(bn_ok$dziedzina_PBL))
-
-count <- as.data.frame(table(bn_ok$czy_automatycznie, bn_ok$rodzaj_ksiazki, bn_ok$dziedzina_PBL)) %>%
-  filter(Var1 == "nie"&Var2=="przedmiotowa")
-
-test <- bn_ok %>%
-  filter(czy_automatycznie=="nie"&rodzaj_ksiazki=="przedmiotowa"&dziedzina_PBL=="bez_ukd_PBL") %>%
-  select(X100,X080,X245,X600,X650,X655,czy_osoba) %>%
-  mutate(kategorie_literackie = ifelse(grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X650,ignore.case = TRUE)|grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X655, ignore.case = TRUE),"tak","nie")) %>%
-  filter(kategorie_literackie=="nie") %>%
-  mutate(lata = ifelse(grepl("\\d{2}-",X100),str_replace(X100,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA),
-         lata_temat = ifelse(grepl("\\d{2}-",X600),str_replace(X600,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA)) %>%
-filter((is.na(lata)&is.na(lata_temat))|!(as.integer(lata)<1800)|!(as.integer(lata_temat)<1800))
-#filter(as.integer(lata)<1800|as.integer(lata_temat)<1800)
-
-count <- as.data.frame(table(bn_ok$rodzaj_ksiazki))
-
-test2 <- bn_ok %>%
-  filter(dziedzina_PBL == "ukd_pogranicze") %>%
-  select(X100,X245,X600,X650,X655,czy_osoba)
-
-test <- test %>%
-  mutate(kategorie_literackie = ifelse(grepl("poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X650,ignore.case = TRUE)|grepl("poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X655, ignore.case = TRUE),"tak","nie"))
-
 #listy nazwisk BN ze zbioru
 #100
 marc_field_100 <- bn_ks %>%
@@ -756,7 +729,65 @@ colnames(count) <- c("dziedzina","czy automatycznie","ile")
 #write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
 
+```{r wyznaczenie zbioru na do uzupełnienia w przyszłości}
+na_pozniej <- bn_ok %>%
+  filter(czy_automatycznie=="nie"&rodzaj_ksiazki=="przedmiotowa"&dziedzina_PBL=="bez_ukd_PBL") %>%
+  mutate(kategorie_literackie = ifelse(grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X650,ignore.case = TRUE)|grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X655, ignore.case = TRUE),"tak","nie")) %>%
+  filter(kategorie_literackie=="nie") %>%
+  mutate(lata = ifelse(grepl("\\d{2}-",X100),str_replace(X100,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA),
+         lata_temat = ifelse(grepl("\\d{2}-",X600),str_replace(X600,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA)) %>%
+filter((is.na(lata)&is.na(lata_temat))|!(as.integer(lata)<1800)|!(as.integer(lata_temat)<1800)) %>%
+  select(id)
+
+write.csv2(na_pozniej, "C:/Users/Cezary/Desktop/bn_2009_ks_na_pozniej.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+
+bn_ok <- sqldf("select *
+               from bn_ok a
+               where a.id not in (select b.id from na_pozniej b)")
+```
+
+
 ```{r automatyczne działowanie}
+
+zapisy <- RJDBC::dbGetQuery(PBL,
+                            "select z.za_zapis_id, dz.dz_dzial_id, dz.dz_nazwa, z.za_status_imp, z.za_uwagi
+                            from pbl_zapisy z
+                            join pbl_dzialy dz on dz.dz_dzial_id=z.za_dz_dzial1_id
+                            where z.za_uwagi like '%import%'") %>%
+  mutate(pracownik_pbl = str_extract(ZA_UWAGI, "(?<=akceptuje:)([A-Z]*)")) %>%
+  select(-ZA_UWAGI)
+
+poprzednie_importy <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008) %>%
+  full_join(.,zapisy,by = "ZA_ZAPIS_ID") %>%
+  select(X650,X655,DZ_DZIAL_ID,DZ_NAZWA,ZA_STATUS_IMP) %>%
+  mutate(X650 = str_remove_all(X650,"\\\\7"),
+         X655 = str_remove_all(X655,"\\\\7"),
+         joint = paste(X650,X655,sep = "~")) %>%
+  select(ZA_STATUS_IMP,joint,DZ_DZIAL_ID,DZ_NAZWA) %>%
+  mutate(joint = str_remove_all(str_replace_all(joint,"(\\$a)","\\\\#7\\1"),"#")) %>%
+  group_by(joint) %>%
+  mutate(grupa = paste(unique(ZA_STATUS_IMP),collapse = ","),
+         DZ_DZIAL_ID = paste(unique(DZ_DZIAL_ID),collapse = "|"),
+         DZ_NAZWA = paste(unique(DZ_NAZWA),collapse = "|")) %>%
+  ungroup() %>%
+  filter(!grepl("\\|",DZ_DZIAL_ID)) %>%
+  filter(grepl("IOK",grupa)) %>%
+  filter(!grepl("INO|IMP|IPN|IPC",grupa)) %>%
+  filter(!grepl("osobowe",DZ_NAZWA))
+  #jak zmiksować te kombinacje????
+  C_wo <- combn(str_split(poprzednie_importy$joint[2],"\\|"),str_count(poprzednie_importy$joint[2],"\\|")+1)
+combn(1:10,2)
+  
+  select(joint, DZ_DZIAL_ID, DZ_NAZWA, grupa) %>%
+  unique() %>%
+  mutate(ile = str_count(grupa,",")+1) %>%
+  filter(grepl("IOK",grupa)) %>%
+  filter(!grepl("INO|IMP|IPN|IPC",grupa)) %>%
+  mutate(czy = str_detect(joint,"\\$y[\\d-]+ w\\.")) %>%
+  filter(czy==FALSE) %>%
+  select(joint) %>%
+  mutate(joint = str_remove_all(str_replace_all(joint,"(\\$a)","\\\\#7\\1"),"#")) %>%
+  mutate(do_wyrzucenia_na_podstawie_INO = "tak")
 
 ```
 
