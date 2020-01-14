@@ -7,7 +7,7 @@ cel: automatycznie IMPORT OK co się da; IMPORT - 5000 zapisów z ukd i deskrypt
 #biblioteki
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-pacman::p_load(utf8,googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,combinat,gtools)
+pacman::p_load(utf8,googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,arrangements)
 
 #połączenie z bazą PBL
 jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
@@ -748,7 +748,6 @@ bn_ok <- sqldf("select *
 
 
 ```{r automatyczne działowanie}
-
 zapisy <- RJDBC::dbGetQuery(PBL,
                             "select z.za_zapis_id, dz.dz_dzial_id, dz.dz_nazwa, z.za_status_imp, z.za_uwagi
                             from pbl_zapisy z
@@ -773,90 +772,55 @@ poprzednie_importy <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_20
   filter(grepl("IOK",ZA_STATUS_IMP)) %>%
   filter(!grepl("INO|IMP|IPN|IPC",ZA_STATUS_IMP)) %>%
   filter(!grepl("osobowe",DZ_NAZWA)) %>%
-  mutate(id = row_number())
-
-poprzednie_importy <- poprzednie_importy %>%
-  mutate(ile = str_count(poprzednie_importy$X650,"\\|")+1)
-###Najszybsze permutacje na świecie!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#TUTAJ
-library(arrangements)
-i <- 432
-test <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X650[i],"\\|")), str_count(poprzednie_importy$X650[i],"\\|")+1))
-
-test <- unite(data = test, col =  "test",sep = "|")
-
-###########
-
-
-
-test <- unlist(str_split(poprzednie_importy$X650[i],"\\|"))
-test <- append(test, "1")
-
-a <- as.data.frame(test[c(1,8)])
-b <- test[c(2,8)]
-
-
-test <- as.data.frame(permutations(str_count(poprzednie_importy$X650[i],"\\|")+1,str_count(poprzednie_importy$X650[i],"\\|")+1,unlist(str_split(poprzednie_importy$X650[i],"\\|")))) %>%
-  data.table::transpose(.) %>%
-  summarize_each(funs(paste(., collapse = "|"))) %>%
-  data.table::transpose(.)
-
-  summarize_each(funs(paste(., collapse = "|"))) %>%
-  data.table::transpose(.)
-  
-
-group_by_all(.) %>%
-  summarize_all(paste, collapse="|")
-
-
-permutations(3,2,letters[1:3])
+  filter(!(is.na(X650)&is.na(X655))) %>%
+  mutate(id = row_number(),
+         ile650 = str_count(X650,"\\|")+1,
+         ile655 = str_count(X655,"\\|")+1) %>%
+  filter(ile650<=10|ile655<=10) %>%
+  select(-ile650,-ile655)
 
 do_dzialowania <- data.frame(id = as.integer(), X650 = as.character(), X655 = as.character(), stringsAsFactors = FALSE)
 x <- 1:length(poprzednie_importy$id)
 for (i in x){
   progress(match(i,x), max.value = length(x)) 
     if (is.na(poprzednie_importy$X650[i])&!is.na(poprzednie_importy$X655[i])){
-      combinations <- as.data.frame(permn(unlist(str_split(poprzednie_importy$X655[i],"\\|")))) %>%
-      summarize_each(funs(paste(., collapse = "|"))) %>%
-      data.table::transpose(.) %>%
+      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X655[i],"\\|")), str_count(poprzednie_importy$X655[i],"\\|")+1)) %>%
+        unite(data=.,col = "permutation", sep = "|") %>%
         mutate(X650 = NA,
-               X655 = V1,
+               X655 = permutation,
                id = poprzednie_importy$id[i]) %>%
         select(id,X650,X655)
-      do_dzialowania <- rbind(do_dzialowania,combinations)
+      do_dzialowania <- rbind(do_dzialowania,permutations)
     } else if (is.na(poprzednie_importy$X655[i])&!is.na(poprzednie_importy$X650[i])){
-      combinations <- as.data.frame(permn(unlist(str_split(poprzednie_importy$X650[i],"\\|")))) %>%
-        summarize_each(funs(paste(., collapse = "|"))) %>%
-        data.table::transpose(.) %>%
-        mutate(X650 = V1,
+      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X650[i],"\\|")), str_count(poprzednie_importy$X650[i],"\\|")+1)) %>%
+        unite(data=.,col = "permutation", sep = "|") %>%
+        mutate(X650 = permutation,
                X655 = NA,
                id = poprzednie_importy$id[i]) %>%
         select(id,X650,X655)
-      do_dzialowania <- rbind(do_dzialowania,combinations)
+      do_dzialowania <- rbind(do_dzialowania,permutations)
     } else {
-      combinations <- as.data.frame(permn(unlist(str_split(poprzednie_importy$X650[i],"\\|")))) %>%
-        summarize_each(funs(paste(., collapse = "|"))) %>%
-        data.table::transpose(.) %>%
-        mutate(X650 = V1,
+      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X650[i],"\\|")), str_count(poprzednie_importy$X650[i],"\\|")+1)) %>%
+        unite(data=.,col = "permutation", sep = "|") %>%
+        mutate(X650 = permutation,
                id = poprzednie_importy$id[i]) %>%
         select(id,X650)
-      combinations650 <- data.frame(stringsAsFactors = FALSE)
-      combinations650 <- rbind(combinations650,combinations)
-      combinations <- as.data.frame(permn(unlist(str_split(poprzednie_importy$X655[i],"\\|")))) %>%
-        summarize_each(funs(paste(., collapse = "|"))) %>%
-        data.table::transpose(.) %>%
-        mutate(X655 = V1,
+      permutations650 <- data.frame(stringsAsFactors = FALSE)
+      permutations650 <- rbind(permutations650,permutations)
+      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X655[i],"\\|")), str_count(poprzednie_importy$X655[i],"\\|")+1)) %>%
+        unite(data=.,col = "permutation", sep = "|") %>%
+        mutate(X655 = permutation,
                id = poprzednie_importy$id[i]) %>%
         select(id,X655)
-      combinations655 <- data.frame(stringsAsFactors = FALSE)
-      combinations655 <- rbind(combinations655,combinations)
-      combinations <- merge(combinations650,combinations655,by = "id",all = TRUE) %>%
+      permutations655 <- data.frame(stringsAsFactors = FALSE)
+      permutations655 <- rbind(permutations655,permutations)
+      permutations <- merge(permutations650,permutations655,by = "id",all = TRUE) %>%
         select(id,X650,X655)
-      do_dzialowania <- rbind(do_dzialowania,combinations)
+      do_dzialowania <- rbind(do_dzialowania,permutations)
     }
 }
-do_dzialowania[] <- lapply(do_dzialowania, gsub, pattern='NA', replacement=NA)
 
+####TUTAJ
 
 
 if (is.na(poprzednie_importy$X650)&!is.na(poprzednie_importy$X655)) {
