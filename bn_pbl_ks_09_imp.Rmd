@@ -390,7 +390,7 @@ bn_ks <- bn_ks %>%
   full_join(.,rekordy_slowa,by = "id")
 
 bn_ok <- bn_ks %>%
-  filter(!((is.na(osoba_bn_autor)|is.na(osoba_bn_temat))&dziedzina_PBL=="bez_ukd_PBL"&is.na(bez_ukd_ale_PBL)&is.na(czy_wspomnienia_reportaz)&is.na(slowa_literackie)))
+  filter(!((is.na(osoba_bn_autor)&is.na(osoba_bn_temat))&dziedzina_PBL=="bez_ukd_PBL"&is.na(bez_ukd_ale_PBL)&is.na(czy_wspomnienia_reportaz)&is.na(slowa_literackie)))
 
 #usunięcie zagranicznych zapisów, które nie są polonikami 
 #na podstawie braku wystąpień frazy "pol" w polach MARC
@@ -553,14 +553,8 @@ reszta <- sqldf("select *
                from bn_ok b)")
 ```
 
-
 ```{r przypisanie książce rodzaju (podmiotowa, przedmiotowa, antologie, współwydanie)}
-###dlaczego drugie przypisywanie rodzaju zmienia błędnie dobrą przedmiotową na złą podmiotową? vide: Rosja i Rosjanie w pamiętnikach
-test <- test %>%
-  slice(68)
-
-
-test <- test %>%
+bn_ok <- bn_ok %>%
   mutate(czy_ma_ukd = ifelse(X080=="","nie","tak"),
          position_dash = ifelse(grepl("(\\\\\\\\\\$a|:)(821\\.)",X080),str_locate(X080,"\\-")[,1], NA),
          position_dash = ifelse(is.na(position_dash),"",as.integer(position_dash)),
@@ -580,14 +574,14 @@ gatunki_podmiotowe <- bn_ok %>%
   filter(str_detect(X655,"\\$y[\\d-]+ w\\."))
 gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
 bn_ok$czy_podmiotowy <- grepl(gatunki_podmiotowe,bn_ok$X655)
-test <- test %>%
+bn_ok <- bn_ok %>%
   mutate(rodzaj_ksiazki = ifelse(str_count(X245, " / ")+1>2,"antologia",
                                  ifelse(str_count(X245, " / ")+1==2,"współwydanie",
                                         ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE,"podmiotowa",
-                                               ifelse(X100!=""&grepl("aPamiętnik|aLiteratura podróżnicza",X655),"podmiotowa",
-                                                      ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655),"podmiotowa",
-                                                             ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN"),"podmiotowa",
-                                                             ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))))%>%
+                                               ifelse(X100!=""&grepl("aPamiętnik|aLiteratura podróżnicza",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
+                                                      ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
+                                                             ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN")&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
+                                                                    ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))))%>%
   select(1:29,rodzaj_ksiazki)
 ```
 
@@ -741,27 +735,25 @@ bn_ok <- bn_ok %>%
   select(-automatyczna_podmiotowa,-automatyczna_przedmiotowa) %>%
   mutate(czy_automatycznie = ifelse(czy_automatycznie=="podmiotowa"&rodzaj_ksiazki!="podmiotowa","nie",as.character(czy_automatycznie)))
 
-count <- as.data.frame(table(bn_ok$czy_automatycznie))
-colnames(count) <- c("dziedzina","czy automatycznie","ile")
-
 #write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
-Czy w ogóle jest sens to robić?
+
 ```{r wyznaczenie zbioru na do uzupełnienia w przyszłości}
-#na_pozniej <- bn_ok %>%
-#  filter(czy_automatycznie=="nie"&rodzaj_ksiazki=="przedmiotowa"&dziedzina_PBL=="bez_ukd_PBL") %>%
-#  mutate(kategorie_literackie = ifelse(grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X650,ignore.case = TRUE)|grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X655, ignore.case = TRUE),"tak","nie")) %>%
-#  filter(kategorie_literackie=="nie") %>%
-#  mutate(lata = ifelse(grepl("\\d{2}-",X100),str_replace(X100,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA),
-#         lata_temat = ifelse(grepl("\\d{2}-",X600),str_replace(X600,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA)) %>%
-#filter((is.na(lata)&is.na(lata_temat))|!(as.integer(lata)<1800)|!(as.integer(lata_temat)<1800)) %>%
-#  select(id)
-#
+na_pozniej <- bn_ok %>%
+  filter(czy_automatycznie=="nie"&rodzaj_ksiazki=="przedmiotowa"&dziedzina_PBL=="bez_ukd_PBL") %>%
+  mutate(kategorie_literackie = ifelse(grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X650,ignore.case = TRUE)|grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X655, ignore.case = TRUE),"tak","nie")) %>%
+  filter(kategorie_literackie=="nie") %>%
+  mutate(lata = ifelse(grepl("\\d{2}-",X100),str_replace(X100,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA),
+         lata_temat = ifelse(grepl("\\d{2}-",X600),str_replace(X600,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA)) %>%
+filter((is.na(lata)&is.na(lata_temat))|!(as.integer(lata)<1800)|!(as.integer(lata_temat)<1800)) %>%
+  select(id)
+
 #write.csv2(na_pozniej, "C:/Users/Cezary/Desktop/bn_2009_ks_na_pozniej.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
-#
-#bn_ok <- sqldf("select *
-#               from bn_ok a
-#               where a.id not in (select b.id from na_pozniej b)")
+
+bn_ok <- sqldf("select *
+               from bn_ok a
+               where a.id not in (select b.id from na_pozniej b)")
+count <- as.data.frame(table(bn_ok$dziedzina_PBL))
 ```
 
 Czy jest sens to robić?
