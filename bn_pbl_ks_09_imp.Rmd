@@ -195,6 +195,12 @@ remove(pbl_viaf2)
 #  unique()
 #count2 <- as.data.frame(table(pbl_viaf$pbl_id))
 
+#utożsamianie po nazewnictwie z informacją o dziale
+tworca_i_dzial <- dbGetQuery(PBL,
+                             "select tw.tw_tworca_id \"pbl_id\", dz.dz_dzial_id||'|'||dz.dz_nazwa \"osoba_pbl_dzial_id_name\"
+                              from pbl_tworcy tw
+                              full join pbl_dzialy dz on dz.dz_dzial_id=tw.tw_dz_dzial_id")
+
 #listy nazwisk BN ze zbioru
 #100
 marc_field_100 <- bn_ks %>%
@@ -233,6 +239,19 @@ marc_field_100 <- marc_field_100 %>%
   select(id,name) %>%
   mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
          name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
+
+osoba_bn_100_pbl <- marc_field_100 %>%
+  unique() %>%
+  inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
+  select(1:3) %>%
+  left_join(.,tworca_i_dzial,by = "pbl_id") %>%
+  select(id,osoba_pbl_dzial_id_name) %>%
+  group_by(id) %>%
+  mutate(osoba_bn_autor = paste(unique(osoba_pbl_dzial_id_name),collapse = "~")) %>%
+  select(-osoba_pbl_dzial_id_name) %>%
+  ungroup() %>%
+  unique()
+
 #600
 marc_field_600 <- bn_ks %>%
   select(id,X600)%>%
@@ -270,6 +289,17 @@ marc_field_600 <- marc_field_600 %>%
   select(id,name) %>%
   mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
          name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
+osoba_bn_600_pbl <- marc_field_600 %>%
+  unique() %>%
+  inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
+  select(1:3) %>%
+  left_join(.,tworca_i_dzial,by = "pbl_id") %>%
+  select(id,osoba_pbl_dzial_id_name) %>%
+  group_by(id) %>%
+  mutate(osoba_bn_temat = paste(unique(osoba_pbl_dzial_id_name),collapse = "~")) %>%
+  select(-osoba_pbl_dzial_id_name) %>%
+  ungroup() %>%
+  unique()
 
 ##700
 #marc_field_700 <- bn_ks %>%
@@ -309,27 +339,11 @@ marc_field_600 <- marc_field_600 %>%
 #  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
 #         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
 
-#utożsamianie po nazewnictwie z informacją o dziale
-tworca_i_dzial <- dbGetQuery(PBL,
-                             "select tw.tw_tworca_id \"pbl_id\", dz.dz_dzial_id||'|'||dz.dz_nazwa \"osoba_pbl_dzial_id_name\"
-                              from pbl_tworcy tw
-                              full join pbl_dzialy dz on dz.dz_dzial_id=tw.tw_dz_dzial_id")
-#bn_records_pbl_people <- rbind(marc_field_100,marc_field_600,marc_field_700) %>%
-bn_records_pbl_people <- rbind(marc_field_100,marc_field_600) %>%
-  unique() %>%
-  inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
-  select(1:3) %>%
-  left_join(.,tworca_i_dzial,by = "pbl_id")
-bn_records_pbl_people_id <- bn_records_pbl_people %>%
-  select(id,osoba_pbl_dzial_id_name) %>%
-  group_by(id) %>%
-  mutate(osoba_pbl_dzial_id_name = paste(unique(osoba_pbl_dzial_id_name),collapse = "~")) %>%
-  ungroup() %>%
-  unique()
-bn_ks <- bn_ks %>%
-  full_join(.,bn_records_pbl_people_id,by = "id")
-
 ###sprawdzić czy nie ma zdublowanego mapowania BN->PBL (czy np. jedna osoba z BN nie zasila kilku twórców PBL)
+
+bn_ks <- bn_ks %>%
+  full_join(.,osoba_bn_100_pbl,by = "id") %>%
+  full_join(.,osoba_bn_600_pbl,by = "id")
 ```
 
 
@@ -342,8 +356,8 @@ bn_ks <- bn_ks %>%
                                               ifelse(str_detect(X080,"\\$a002")|str_detect(X080,"(?<=\\$a|:)(305)")|str_detect(X080,"(?<=\\$a39|:39)(\\(438\\)|8\\.2)")|str_detect(X080,"(?<=\\$a|:)(929[^\\.]051)"),"ukd_pogranicze","bez_ukd_PBL")))))
 #wskazanie interesujących PBL rekordów bez UKD, które są w kluczu PBL
 bez_ukd_ale_PBL <- bn_ks %>%
-  select(id, X080, X650, X655, osoba_pbl_dzial_id_name, dziedzina_PBL) %>%
-  filter(dziedzina_PBL == "bez_ukd_PBL"&X080==""&is.na(osoba_pbl_dzial_id_name)) %>%
+  select(id, X080, X650, X655, osoba_bn_autor, osoba_bn_temat, dziedzina_PBL) %>%
+  filter(dziedzina_PBL == "bez_ukd_PBL"&X080==""&is.na(osoba_bn_autor)&is.na(osoba_bn_temat)) %>%
   mutate(bez_ukd_ale_PBL = grepl("literat|literac|pisar|bajk|dramat|epigramat|esej|felieton|film|komedi|nowel|opowiadani|pamiętnik|poemiks|poezj|powieść|proza|reportaż|satyr|wspomnieni|Scenariusze zajęć|Podręczniki dla gimnazjów|teatr|Nagrod|aforyzm|baśń|baśnie|polonijn|dialogi|fantastyka naukowa|legend|pieśń|poemat|przypowieś|honoris causa|filologi|kino polskie|pieśni",X650, ignore.case = TRUE)|grepl("literat|literac|pisar|bajk|dramat|epigramat|esej|felieton|film|komedi|nowel|opowiadani|pamiętnik|poemiks|poezj|powieść|proza|reportaż|satyr|wspomnieni|Scenariusze zajęć|Podręczniki dla gimnazjów|teatr|Nagrod|aforyzm|baśń|baśnie|polonijn|dialogi|fantastyka naukowa|legend|pieśń|poemat|przypowieś|honoris causa|filologi|kino polskie|pieśni",X655,ignore.case = TRUE)) %>%
   filter(bez_ukd_ale_PBL == TRUE) %>%
   select(id) %>%
@@ -376,7 +390,7 @@ bn_ks <- bn_ks %>%
   full_join(.,rekordy_slowa,by = "id")
 
 bn_ok <- bn_ks %>%
-  filter(!(is.na(osoba_pbl_dzial_id_name)&dziedzina_PBL=="bez_ukd_PBL"&is.na(bez_ukd_ale_PBL)&is.na(czy_wspomnienia_reportaz)&is.na(slowa_literackie)))
+  filter(!((is.na(osoba_bn_autor)|is.na(osoba_bn_temat))&dziedzina_PBL=="bez_ukd_PBL"&is.na(bez_ukd_ale_PBL)&is.na(czy_wspomnienia_reportaz)&is.na(slowa_literackie)))
 
 #usunięcie zagranicznych zapisów, które nie są polonikami 
 #na podstawie braku wystąpień frazy "pol" w polach MARC
@@ -397,12 +411,12 @@ nie_poloniki <- bn_ok %>%
 
 bn_ok <- bn_ok %>%
   full_join(.,nie_poloniki,by = "id") %>%
-  select(id, X008, X009, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X710, X800, X830, rok, osoba_pbl_dzial_id_name, dziedzina_PBL, bez_ukd_ale_PBL, czy_wspomnienia_reportaz, slowa_literackie, czy_polonik) %>%
+  select(id, X008, X009, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X500, X546, X600, X650, X655, X700, X710, X800, X830, rok, osoba_bn_autor, osoba_bn_temat, dziedzina_PBL, bez_ukd_ale_PBL, czy_wspomnienia_reportaz, slowa_literackie, czy_polonik) %>%
   unique()
 #wskazanie niepoloników i usunięcie ze zbioru
 nie_poloniki <- bn_ok %>%
   filter(czy_polonik=="nie") %>%
-  filter(is.na(osoba_pbl_dzial_id_name)|!(osoba_pbl_dzial_id_name %in% c("148|Hasła osobowe (literatura polska)","430|Hasła osobowe (Ludzie teatru i filmu)")))
+  filter(is.na(osoba_bn_autor)|is.na(osoba_bn_temat)|!(osoba_bn_autor %in% c("148|Hasła osobowe (literatura polska)","430|Hasła osobowe (Ludzie teatru i filmu)"))|!(osoba_bn_temat %in% c("148|Hasła osobowe (literatura polska)","430|Hasła osobowe (Ludzie teatru i filmu)")))
 bn_ok <- sqldf("select *
                from bn_ok a
                where a.id not in (select b.id from nie_poloniki b)") %>%
@@ -474,7 +488,7 @@ bn_ok <- bn_ok %>%
          X655 = ifelse(is.na(X655),"",as.character(X655)))
 
 do_importu_NIE <- bn_ok %>%
-  filter(is.na(osoba_pbl_dzial_id_name)&is.na(slowa_literackie)&do_wyrzucenia_na_podstawie_INO=="tak") %>%
+  filter(is.na(osoba_bn_autor)&is.na(osoba_bn_temat)&is.na(slowa_literackie)&do_wyrzucenia_na_podstawie_INO=="tak") %>%
   filter(!grepl("literat|literac|pamiętnik|pisar",X655,ignore.case = TRUE))
 
 bn_ok <- sqldf("select *
@@ -524,7 +538,7 @@ bn_ok <- bn_ok %>%
   filter(!is.na(id))
 
 do_importu_NIE2 <- bn_ok %>%
-  filter(is.na(osoba_pbl_dzial_id_name)&is.na(slowa_literackie)&do_wyrzucenia_na_podstawie_INO=="tak")
+  filter(is.na(osoba_bn_autor)&is.na(osoba_bn_temat)&is.na(slowa_literackie)&do_wyrzucenia_na_podstawie_INO=="tak")
 
 bn_ok <- sqldf("select *
                from bn_ok a
@@ -541,7 +555,12 @@ reszta <- sqldf("select *
 
 
 ```{r przypisanie książce rodzaju (podmiotowa, przedmiotowa, antologie, współwydanie)}
-bn_ok <- bn_ok %>%
+###dlaczego drugie przypisywanie rodzaju zmienia błędnie dobrą przedmiotową na złą podmiotową? vide: Rosja i Rosjanie w pamiętnikach
+test <- test %>%
+  slice(68)
+
+
+test <- test %>%
   mutate(czy_ma_ukd = ifelse(X080=="","nie","tak"),
          position_dash = ifelse(grepl("(\\\\\\\\\\$a|:)(821\\.)",X080),str_locate(X080,"\\-")[,1], NA),
          position_dash = ifelse(is.na(position_dash),"",as.integer(position_dash)),
@@ -561,7 +580,7 @@ gatunki_podmiotowe <- bn_ok %>%
   filter(str_detect(X655,"\\$y[\\d-]+ w\\."))
 gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
 bn_ok$czy_podmiotowy <- grepl(gatunki_podmiotowe,bn_ok$X655)
-bn_ok <- bn_ok %>%
+test <- test %>%
   mutate(rodzaj_ksiazki = ifelse(str_count(X245, " / ")+1>2,"antologia",
                                  ifelse(str_count(X245, " / ")+1==2,"współwydanie",
                                         ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE,"podmiotowa",
@@ -569,11 +588,10 @@ bn_ok <- bn_ok %>%
                                                       ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655),"podmiotowa",
                                                              ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN"),"podmiotowa",
                                                              ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))))%>%
-  select(1:28,rodzaj_ksiazki)
+  select(1:29,rodzaj_ksiazki)
 ```
 
 ```{r wyznaczenie zbioru automatycznie IOK}
-###TUTAJ###
 IOK_podm <- bn_ok %>%
   filter(!grepl("\\$t",X700)) %>%
   mutate(#X500 = ifelse(grepl("\\$aTyt[,\\.] oryg",X500),"",as.character(X500)),
@@ -723,194 +741,116 @@ bn_ok <- bn_ok %>%
   select(-automatyczna_podmiotowa,-automatyczna_przedmiotowa) %>%
   mutate(czy_automatycznie = ifelse(czy_automatycznie=="podmiotowa"&rodzaj_ksiazki!="podmiotowa","nie",as.character(czy_automatycznie)))
 
-count <- as.data.frame(table(bn_ok$dziedzina_PBL,bn_ok$rodzaj_ksiazki))
+count <- as.data.frame(table(bn_ok$czy_automatycznie))
 colnames(count) <- c("dziedzina","czy automatycznie","ile")
 
 #write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
-
+Czy w ogóle jest sens to robić?
 ```{r wyznaczenie zbioru na do uzupełnienia w przyszłości}
-na_pozniej <- bn_ok %>%
-  filter(czy_automatycznie=="nie"&rodzaj_ksiazki=="przedmiotowa"&dziedzina_PBL=="bez_ukd_PBL") %>%
-  mutate(kategorie_literackie = ifelse(grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X650,ignore.case = TRUE)|grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X655, ignore.case = TRUE),"tak","nie")) %>%
-  filter(kategorie_literackie=="nie") %>%
-  mutate(lata = ifelse(grepl("\\d{2}-",X100),str_replace(X100,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA),
-         lata_temat = ifelse(grepl("\\d{2}-",X600),str_replace(X600,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA)) %>%
-filter((is.na(lata)&is.na(lata_temat))|!(as.integer(lata)<1800)|!(as.integer(lata_temat)<1800)) %>%
-  select(id)
-
-write.csv2(na_pozniej, "C:/Users/Cezary/Desktop/bn_2009_ks_na_pozniej.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
-
-bn_ok <- sqldf("select *
-               from bn_ok a
-               where a.id not in (select b.id from na_pozniej b)")
+#na_pozniej <- bn_ok %>%
+#  filter(czy_automatycznie=="nie"&rodzaj_ksiazki=="przedmiotowa"&dziedzina_PBL=="bez_ukd_PBL") %>%
+#  mutate(kategorie_literackie = ifelse(grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X650,ignore.case = TRUE)|grepl("mitolog|baś|bajk|poezj|liryk|epik|dramat|literac|literat|pisar|wiersz|proz|powieś|opowiad|miniatur|aforyzm|esej|szkic|feliet|report|dzienni|wspomnie|autobiograf|kaza|rozmyśl|list",X655, ignore.case = TRUE),"tak","nie")) %>%
+#  filter(kategorie_literackie=="nie") %>%
+#  mutate(lata = ifelse(grepl("\\d{2}-",X100),str_replace(X100,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA),
+#         lata_temat = ifelse(grepl("\\d{2}-",X600),str_replace(X600,"(.*\\$d\\(.*?)(\\d{2,4})(\\?{0,1}-.*)","\\2"),NA)) %>%
+#filter((is.na(lata)&is.na(lata_temat))|!(as.integer(lata)<1800)|!(as.integer(lata_temat)<1800)) %>%
+#  select(id)
+#
+#write.csv2(na_pozniej, "C:/Users/Cezary/Desktop/bn_2009_ks_na_pozniej.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+#
+#bn_ok <- sqldf("select *
+#               from bn_ok a
+#               where a.id not in (select b.id from na_pozniej b)")
 ```
 
-
-```{r automatyczne działowanie}
-zapisy <- RJDBC::dbGetQuery(PBL,
-                            "select z.za_zapis_id, dz.dz_dzial_id, dz.dz_nazwa, z.za_status_imp, z.za_uwagi
-                            from pbl_zapisy z
-                            join pbl_dzialy dz on dz.dz_dzial_id=z.za_dz_dzial1_id
-                            where z.za_uwagi like '%import%'") %>%
-  mutate(pracownik_pbl = str_extract(ZA_UWAGI, "(?<=akceptuje:)([A-Z]*)")) %>%
-  select(-ZA_UWAGI)
-
-poprzednie_importy <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008) %>%
-  full_join(.,zapisy,by = "ZA_ZAPIS_ID") %>%
-  select(X650,X655,DZ_DZIAL_ID,DZ_NAZWA,ZA_STATUS_IMP) %>%
-  mutate(X650 = str_remove_all(X650,"\\\\7"),
-         X655 = str_remove_all(X655,"\\\\7"),
-         X650 = str_remove_all(str_replace_all(X650,"(\\$a)","\\\\#7\\1"),"#"),
-         X655 = str_remove_all(str_replace_all(X655,"(\\$a)","\\\\#7\\1"),"#")) %>%
-  group_by_at(vars(X650:DZ_NAZWA)) %>%
-  mutate(ZA_STATUS_IMP = paste(unique(ZA_STATUS_IMP),collapse = "|")) %>%
-  ungroup() %>%
-  unique() %>%
-  ungroup() %>%
-  filter(!grepl("\\|",DZ_DZIAL_ID)) %>%
-  filter(grepl("IOK",ZA_STATUS_IMP)) %>%
-  filter(!grepl("INO|IMP|IPN|IPC",ZA_STATUS_IMP)) %>%
-  filter(!grepl("osobowe",DZ_NAZWA)) %>%
-  filter(!(is.na(X650)&is.na(X655))) %>%
-  mutate(id = row_number(),
-         ile650 = str_count(X650,"\\|")+1,
-         ile655 = str_count(X655,"\\|")+1) %>%
-  filter(ile650<=10|ile655<=10) %>%
-  select(-ile650,-ile655)
-
-do_dzialowania <- data.frame(id = as.integer(), X650 = as.character(), X655 = as.character(), stringsAsFactors = FALSE)
-x <- 1:length(poprzednie_importy$id)
-for (i in x){
-  progress(match(i,x), max.value = length(x)) 
-    if (is.na(poprzednie_importy$X650[i])&!is.na(poprzednie_importy$X655[i])){
-      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X655[i],"\\|")), str_count(poprzednie_importy$X655[i],"\\|")+1)) %>%
-        unite(data=.,col = "permutation", sep = "|") %>%
-        mutate(X650 = NA,
-               X655 = permutation,
-               id = poprzednie_importy$id[i]) %>%
-        select(id,X650,X655)
-      do_dzialowania <- rbind(do_dzialowania,permutations)
-    } else if (is.na(poprzednie_importy$X655[i])&!is.na(poprzednie_importy$X650[i])){
-      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X650[i],"\\|")), str_count(poprzednie_importy$X650[i],"\\|")+1)) %>%
-        unite(data=.,col = "permutation", sep = "|") %>%
-        mutate(X650 = permutation,
-               X655 = NA,
-               id = poprzednie_importy$id[i]) %>%
-        select(id,X650,X655)
-      do_dzialowania <- rbind(do_dzialowania,permutations)
-    } else {
-      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X650[i],"\\|")), str_count(poprzednie_importy$X650[i],"\\|")+1)) %>%
-        unite(data=.,col = "permutation", sep = "|") %>%
-        mutate(X650 = permutation,
-               id = poprzednie_importy$id[i]) %>%
-        select(id,X650)
-      permutations650 <- data.frame(stringsAsFactors = FALSE)
-      permutations650 <- rbind(permutations650,permutations)
-      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X655[i],"\\|")), str_count(poprzednie_importy$X655[i],"\\|")+1)) %>%
-        unite(data=.,col = "permutation", sep = "|") %>%
-        mutate(X655 = permutation,
-               id = poprzednie_importy$id[i]) %>%
-        select(id,X655)
-      permutations655 <- data.frame(stringsAsFactors = FALSE)
-      permutations655 <- rbind(permutations655,permutations)
-      permutations <- merge(permutations650,permutations655,by = "id",all = TRUE) %>%
-        select(id,X650,X655)
-      do_dzialowania <- rbind(do_dzialowania,permutations)
-    }
-}
-
-####TUTAJ
-
-
-if (is.na(poprzednie_importy$X650)&!is.na(poprzednie_importy$X655)) {
-  x <- poprzednie_importy$id[is.na(poprzednie_importy$X650)&!is.na(poprzednie_importy$X655)]
-  for (i in x) {
-    progress(match(i,x), max.value = length(x)) 
-    combinations <- as.data.frame(permn(unlist(str_split(poprzednie_importy$X655[i],"\\|")))) %>%
-      summarize_each(funs(paste(., collapse = "|"))) %>%
-      data.table::transpose(.) %>%
-      mutate(X650 = NA,
-             X655 = V1,
-             id = poprzednie_importy$id[i]) %>%
-      select(id,X650,X655)
-    do_dzialowania <- rbind(do_dzialowania,combinations)
-  } 
-} else if (is.na(poprzednie_importy$X655)&!is.na(poprzednie_importy$X650)) {
-    x <- poprzednie_importy$id[is.na(poprzednie_importy$X655)&!is.na(poprzednie_importy$X650)]
-    for (i in x) {
-    progress(match(i,x), max.value = length(x)) 
-    combinations <- as.data.frame(permn(unlist(str_split(poprzednie_importy$X650[i],"\\|")))) %>%
-      summarize_each(funs(paste(., collapse = "|"))) %>%
-      data.table::transpose(.) %>%
-      mutate(X650 = V1,
-             X655 = NA,
-             id = poprzednie_importy$id[i]) %>%
-      select(id,X650,X655)
-    do_dzialowania <- rbind(do_dzialowania,combinations)
-    }
-} else {
-  x <- poprzednie_importy$id[!is.na(poprzednie_importy$X655)&!is.na(poprzednie_importy$X650)]
-    for (i in x) {
-    progress(match(i,x), max.value = length(x)) 
-    combinations <- as.data.frame(permn(unlist(str_split(poprzednie_importy$X650[i],"\\|")))) %>%
-      summarize_each(funs(paste(., collapse = "|"))) %>%
-      data.table::transpose(.) %>%
-      mutate(X650 = V1,
-             id = poprzednie_importy$id[i]) %>%
-      select(id,X650)
-    combinations650 <- data.frame(stringsAsFactors = FALSE)
-    combinations650 <- rbind(combinations650,combinations)
-    combinations <- as.data.frame(permn(unlist(str_split(poprzednie_importy$X655[i],"\\|")))) %>%
-      summarize_each(funs(paste(., collapse = "|"))) %>%
-      data.table::transpose(.) %>%
-      mutate(X655 = V1,
-             id = poprzednie_importy$id[i]) %>%
-      select(id,X655)
-    combinations655 <- data.frame(stringsAsFactors = FALSE)
-    combinations655 <- rbind(combinations655,combinations)
-    combinations <- merge(combinations650,combinations655,by = "id",all = TRUE) %>%
-      select(id,X650,X655)
-    do_dzialowania <- rbind(do_dzialowania,combinations)
-    }
-}
-
-
-
-  select(ZA_STATUS_IMP,joint,DZ_DZIAL_ID,DZ_NAZWA) %>%
-  mutate(joint = str_remove_all(str_replace_all(joint,"(\\$a)","\\\\#7\\1"),"#")) %>%
-  group_by(joint) %>%
-  mutate(grupa = paste(unique(ZA_STATUS_IMP),collapse = ","),
-         DZ_DZIAL_ID = paste(unique(DZ_DZIAL_ID),collapse = "|"),
-         DZ_NAZWA = paste(unique(DZ_NAZWA),collapse = "|")) %>%
-  ungroup() %>%
-  filter(!grepl("\\|",DZ_DZIAL_ID)) %>%
-  filter(grepl("IOK",grupa)) %>%
-  filter(!grepl("INO|IMP|IPN|IPC",grupa)) %>%
-  filter(!grepl("osobowe",DZ_NAZWA))
-  #jak zmiksować te kombinacje????
-
-combinations <- data.table::transpose(as.data.frame(permn(unlist(str_split(poprzednie_importy$joint[2],"\\|"))))) %>%
-  group_by_at(vars(V1:V3)) %>%
-  summarize_all(paste, collapse=",")
-
-  
-  select(joint, DZ_DZIAL_ID, DZ_NAZWA, grupa) %>%
-  unique() %>%
-  mutate(ile = str_count(grupa,",")+1) %>%
-  filter(grepl("IOK",grupa)) %>%
-  filter(!grepl("INO|IMP|IPN|IPC",grupa)) %>%
-  mutate(czy = str_detect(joint,"\\$y[\\d-]+ w\\.")) %>%
-  filter(czy==FALSE) %>%
-  select(joint) %>%
-  mutate(joint = str_remove_all(str_replace_all(joint,"(\\$a)","\\\\#7\\1"),"#")) %>%
-  mutate(do_wyrzucenia_na_podstawie_INO = "tak")
-
-```
-
-
-```{r wczytanie gotowego przetworzonego pliku BN}
-bn_ok <- read.csv2("C:/Users/Cezary/Downloads/bn_ok_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
+Czy jest sens to robić?
+```{r automatyczne działowanie przedmiotowej}
+###automatycznie działowanie przedmiotowej na podstawie dotychczasowych importów
+#zapisy <- RJDBC::dbGetQuery(PBL,
+#                            "select z.za_zapis_id, dz.dz_dzial_id, dz.dz_nazwa, z.za_status_imp, z.za_uwagi
+#                            from pbl_zapisy z
+#                            join pbl_dzialy dz on dz.dz_dzial_id=z.za_dz_dzial1_id
+#                            where z.za_uwagi like '%import%'") %>%
+#  mutate(pracownik_pbl = str_extract(ZA_UWAGI, "(?<=akceptuje:)([A-Z]*)")) %>%
+#  select(-ZA_UWAGI)
+#
+#poprzednie_importy <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008) %>%
+#  full_join(.,zapisy,by = "ZA_ZAPIS_ID") %>%
+#  select(X650,X655,DZ_DZIAL_ID,DZ_NAZWA,ZA_STATUS_IMP) %>%
+#  mutate(X650 = str_remove_all(X650,"\\\\7"),
+#         X655 = str_remove_all(X655,"\\\\7"),
+#         X650 = str_remove_all(str_replace_all(X650,"(\\$a)","\\\\#7\\1"),"#"),
+#         X655 = str_remove_all(str_replace_all(X655,"(\\$a)","\\\\#7\\1"),"#")) %>%
+#  group_by_at(vars(X650:DZ_NAZWA)) %>%
+#  mutate(ZA_STATUS_IMP = paste(ZA_STATUS_IMP,collapse = "|")) %>%
+#  ungroup() %>%
+#  unique() %>%
+#  ungroup() %>%
+#  filter(!grepl("\\|",DZ_DZIAL_ID)) %>%
+#  filter(grepl("IOK",ZA_STATUS_IMP)) %>%
+#  filter(!grepl("INO|IMP|IPN|IPC",ZA_STATUS_IMP)) %>%
+#  filter(!grepl("osobowe",DZ_NAZWA)) %>%
+#  filter(!(is.na(X650)&is.na(X655))) %>%
+#  mutate(ile650 = str_count(X650,"\\|")+1,
+#         ile655 = str_count(X655,"\\|")+1) %>%
+#  filter(ile650<=10|ile655<=10) %>%
+#  select(-ile650,-ile655) %>%
+#  mutate(ile_statusow = str_count(ZA_STATUS_IMP,"\\|")+1) %>%
+#  arrange(X655,X650,-ile_statusow)
+#poprzednie_importy$id_grupy <- cumsum(!duplicated(poprzednie_importy[1:2]))
+#poprzednie_importy <- poprzednie_importy[!duplicated(poprzednie_importy$id_grupy),] %>%
+#  mutate(id = row_number()) %>%
+#  select(-ile_statusow,-id_grupy)
+#
+#do_dzialowania <- data.frame(id = as.integer(), X650 = as.character(), X655 = as.character(), stringsAsFactors = FALSE)
+#x <- 1:length(poprzednie_importy$id)
+#for (i in x){
+#  progress(match(i,x), max.value = length(x)) 
+#    if (is.na(poprzednie_importy$X650[i])&!is.na(poprzednie_importy$X655[i])){
+#      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X655[i],"\\|")), str_count(poprzednie_importy$X655[i],"\\|")+1)) %>%
+#        unite(data=.,col = "permutation", sep = "|") %>%
+#        mutate(X650 = NA,
+#               X655 = permutation,
+#               id = poprzednie_importy$id[i]) %>%
+#        select(id,X650,X655)
+#      do_dzialowania <- rbind(do_dzialowania,permutations)
+#    } else if (is.na(poprzednie_importy$X655[i])&!is.na(poprzednie_importy$X650[i])){
+#      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X650[i],"\\|")), str_count(poprzednie_importy$X650[i],"\\|")+1)) %>%
+#        unite(data=.,col = "permutation", sep = "|") %>%
+#        mutate(X650 = permutation,
+#               X655 = NA,
+#               id = poprzednie_importy$id[i]) %>%
+#        select(id,X650,X655)
+#      do_dzialowania <- rbind(do_dzialowania,permutations)
+#    } else {
+#      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X650[i],"\\|")), str_count(poprzednie_importy$X650[i],"\\|")+1)) %>%
+#        unite(data=.,col = "permutation", sep = "|") %>%
+#        mutate(X650 = permutation,
+#               id = poprzednie_importy$id[i]) %>%
+#        select(id,X650)
+#      permutations650 <- data.frame(stringsAsFactors = FALSE)
+#      permutations650 <- rbind(permutations650,permutations)
+#      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X655[i],"\\|")), str_count(poprzednie_importy$X655[i],"\\|")+1)) %>%
+#        unite(data=.,col = "permutation", sep = "|") %>%
+#        mutate(X655 = permutation,
+#               id = poprzednie_importy$id[i]) %>%
+#        select(id,X655)
+#      permutations655 <- data.frame(stringsAsFactors = FALSE)
+#      permutations655 <- rbind(permutations655,permutations)
+#      permutations <- merge(permutations650,permutations655,by = "id",all = TRUE) %>%
+#        select(id,X650,X655)
+#      do_dzialowania <- rbind(do_dzialowania,permutations)
+#    }
+#}
+#
+#do_dzialowania <- do_dzialowania %>%
+#  full_join(.,poprzednie_importy %>% select(id,DZ_DZIAL_ID,DZ_NAZWA),by = "id") %>%
+#  select(-id)
+#do_dzialowania[is.na(do_dzialowania)] <- ""
+#####tutaj sprawdzić
+#do_dzialowania_przedm <- merge(bn_ok %>% filter(czy_automatycznie=="nie"&rodzaj_ksiazki=="przedmiotowa"),do_dzialowania, by = c("X650","X655")) %>%
+#  select(id,DZ_DZIAL_ID,DZ_NAZWA)
 ```
 
 ```{r wczytanie danych PBL}
@@ -1011,12 +951,7 @@ PBL_wydawnictwa <- dbReadTable(PBL,'PBL_WYDAWNICTWA') %>%
 PBL_rodzaje_zapisow <- dbReadTable(PBL,'PBL_RODZAJE_ZAPISOW')
 ```
 
-```{r przypisanie redaktorów do książek}
-#pamiętać o anonimowej podmiotowej
-#PROBLEM
-#czemu nie powiązało niektórych autorób PBL-BN? np. Anne Rice 1941-
-#podmiotowa
-
+```{r przypisanie redaktorów do książek podmiotowych}
 podmiotowa_redaktorzy <- bn_ok %>%
   filter(rodzaj_ksiazki=="podmiotowa"&X100!=""&!grepl("\\|",X100))
 
@@ -1067,6 +1002,50 @@ marc_field_100 <- marc_field_100 %>%
 
 podmiotowa_redaktorzy <- podmiotowa_redaktorzy %>%
   left_join(.,marc_field_100,by="id")
+
+test <- podmiotowa_redaktorzy %>%
+  filter(is.na(TW_TWORCA_ID))
+
+marc_field_100 <- test %>%
+  select(id,X100)%>%
+  filter(X100!="") %>%
+  mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X100",sep = "~",direction = "long") %>%
+  filter(X100!="") %>%
+  mutate(X100=str_remove_all(X100,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(test$X100,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_100<-cbind(marc_field_100,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_100$X100 <- str_replace(marc_field_100$X100,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_100$X100),str_replace_all(gsub(string,"\\3",marc_field_100$X100),"\\${2}.", "~"),NA)
+}
+marc_field_100 <- marc_field_100 %>%
+  select(id,`$a`,`$d`,`$c`) %>%
+  mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
+  select(id,name) %>%
+  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
+         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
+
+test <- marc_field_100 %>%
+  select(name) %>%
+  unique()
 ###TUTAJ###
 
 
@@ -1097,6 +1076,11 @@ where z.za_uwagi like '%import%'"), by = "ZA_ZAPIS_ID") %>%
 
 count <- as.data.frame(table(poprzednie_importy$pracownik))
 
+```
+
+
+```{r wczytanie gotowego przetworzonego pliku BN}
+bn_ok <- read.csv2("C:/Users/Cezary/Downloads/bn_ok_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
 ```
 
 ```{r przypisanie redaktor?w do przedmiotowej}
