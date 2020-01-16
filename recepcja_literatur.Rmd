@@ -6,15 +6,14 @@ output: html_notebook
 ```{r}
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
-pacman::p_load(googlesheets,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,RJSONIO)
+pacman::p_load(googlesheets4,zoo,openxlsx,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,xlsx,RJSONIO)
 
 #jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="E:/Cezary/Documents/ojdbc6.jar")
-jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/cezar/Documents/R/ojdbc6.jar")
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
 PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
 
 #wczytywanie kartotek PBL
-redaktorzy_dzialow <- gs_read(gs_title("redaktorzy działów"))
-redaktorzy_dzialow <- redaktorzy_dzialow %>%
+redaktorzy_dzialow <- sheets_read(ss = "1Baje-ZfPgAKEDAoDzeo_eCBDrsL7jAXt6ubP2cedbFc", sheet = "redaktorzy_działów") %>%
   select(DZ_DZIAL_ID, DZ_NAZWA, redaktor_dzialu)
 
 PBL_dzialy <- dbReadTable(PBL,'PBL_DZIALY')
@@ -262,7 +261,7 @@ pbl_books <- merge(pbl_books,id_dz_lit_obce, by.x = "literatura_obca", by.y = "D
 pbl_books <- pbl_books %>%
   select(3:6,2,7:25,literatura_id = DZ_DZIAL_ID, literatura_obca)
 
-write.csv2(pbl_books, file = "C:/Users/cezar/Desktop/pbl_books.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(pbl_books, file = "C:/Users/Cezary/Desktop/pbl_books.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 
 licznik <- as.data.frame(table(pbl_books$ZA_RO_ROK,pbl_books$literatura_obca)) %>%
   filter(Freq > 0)

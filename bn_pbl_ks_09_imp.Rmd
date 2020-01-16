@@ -1003,8 +1003,6 @@ marc_field_600 <- merge(marc_field_600,count,by.x = "id", by.y = "Var1") %>%
   select(-Freq) %>%
   rename(DZ_DZIAL_ID=TW_DZ_DZIAL_ID)
 
-do_przedmiotowej1 <- marc_field_600
-
 ###przypisanie do redaktorów na podstawie literatury z pola 655
 `%notin%` <- Negate(`%in%`)
 przedmiotowa_redaktorzy <- bn_ok %>%
@@ -1128,7 +1126,7 @@ marc_field_650 <- marc_field_650[!duplicated(marc_field_650$same),] %>%
          TW_IMIE = NA) %>%
   select(names(marc_field_600))
 
-do_przedmiotowej2 <- rbind(marc_field_600,marc_field_655,marc_field_650)
+do_przedmiotowej1 <- rbind(marc_field_600,marc_field_655,marc_field_650)
 
 #to będzie chyba potrzebne na końcu
 #przedmiotowa_redaktorzy <- bn_ok %>%
@@ -1162,47 +1160,65 @@ poprzednie_importy <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_20
 #przypisanie na podstawie częstotliwości deskryptorów 655
 przedmiotowa_redaktorzy <- bn_ok %>%
   filter(rodzaj_ksiazki=="przedmiotowa") %>%
-  filter(id %notin% do_przedmiotowej$id)
+  filter(id %notin% do_przedmiotowej1$id)
 
-deskryptory655 <- as.data.frame(table(poprzednie_importy$X655,poprzednie_importy$pracownik_pbl)) %>%
-  filter(Freq>0) %>%
-  arrange(Var1)
+deskryptory655 <- poprzednie_importy %>%
+  select(X655,pracownik_pbl,DZ_DZIAL_ID,DZ_NAZWA) %>%
+  filter(!is.na(X655)) %>%
+  unite(data=.,col = "deskryptor655", sep = "~")
 
-deskryptory655$id_grupy <- cumsum(!duplicated(deskryptory655[1]))
+deskryptory655 <- as.data.frame(table(deskryptory655$deskryptor655)) %>%
+  cSplit(.,"Var1",sep = "~",direction = "wide") %>%
+  rename(X655 = Var1_1,
+         redaktor_dzialu = Var1_2,
+         DZ_DZIAL_ID = Var1_3,
+         DZ_NAZWA = Var1_4) %>%
+  mutate(X655 = str_remove_all(X655,"\\\\7\\$a"),
+         X655 = str_remove_all(X655,"\\$2DBN"),
+         X655 = str_replace_all(X655,"\\$.|\\|"," "),
+         X655 = str_replace_all(X655," ",".*")) %>%
+  arrange(X655,-Freq,DZ_NAZWA)
+
+deskryptory655$id_grupy <- cumsum(!duplicated(deskryptory655[2]))
 deskryptory655 <- deskryptory655[!duplicated(deskryptory655$id_grupy),] %>%
   select(-id_grupy) %>%
-  arrange(-Freq) %>%
-  mutate(Var1 = str_remove_all(Var1,"\\\\7\\$a"),
-         Var1 = str_remove_all(Var1,"\\$2DBN"),
-         Var1 = str_replace_all(Var1,"\\$.|\\|"," "),
-         Var1 = str_replace_all(Var1," ",".*"))
-x <- 1:length(deskryptory655$Var1)
+  arrange(-Freq)
+
+x <- 1:length(deskryptory655$X655)
 test <- data.frame(stringsAsFactors = FALSE)
 for (i in x) {
   progress(match(i,x), max.value = length(x))
-    do_przedmiotowej3 <- przedmiotowa_redaktorzy %>%
-      mutate(osoba = ifelse(grepl(deskryptory655$Var1[i],X655),as.character(deskryptory655$Var2)[i],NA),
-             ile = ifelse(grepl(deskryptory655$Var1[i],X655),as.integer(deskryptory655$Freq)[i],NA),
-             co = ifelse(grepl(deskryptory655$Var1[i],X655),as.character(deskryptory655$Var1)[i],NA)) %>%
-      filter(!is.na(osoba))
-    if (length(do_przedmiotowej3$osoba)>0) {
-      test <- rbind(test,do_przedmiotowej3)
+    do_przedmiotowej2 <- przedmiotowa_redaktorzy %>%
+      mutate(redaktor_dzialu = ifelse(grepl(deskryptory655$X655[i],X655),as.character(deskryptory655$redaktor_dzialu)[i],NA),
+             ile = ifelse(grepl(deskryptory655$X655[i],X655),as.integer(deskryptory655$Freq)[i],NA),
+             co = ifelse(grepl(deskryptory655$X655[i],X655),as.character(deskryptory655$X655)[i],NA),
+             DZ_DZIAL_ID = ifelse(grepl(deskryptory655$X655[i],X655),as.integer(deskryptory655$DZ_DZIAL_ID)[i],NA),
+             DZ_NAZWA = ifelse(grepl(deskryptory655$X655[i],X655),as.character(deskryptory655$DZ_NAZWA)[i],NA)) %>%
+      filter(!is.na(redaktor_dzialu))
+    if (length(do_przedmiotowej2$redaktor_dzialu)>0) {
+      test <- rbind(test,do_przedmiotowej2)
     } else {}
     
 }
 count <- as.data.frame(table(test$id))
-do_przedmiotowej3 <- merge(test,count, by.x = "id",by.y = "Var1") %>%
+do_przedmiotowej2 <- merge(test,count, by.x = "id",by.y = "Var1") %>%
   mutate(dlugosc = nchar(co)) %>%
   arrange(-Freq,id,-dlugosc,-ile)
 
-do_przedmiotowej3$id_grupy <- cumsum(!duplicated(do_przedmiotowej3[1]))
-do_przedmiotowej3 <- do_przedmiotowej3[!duplicated(do_przedmiotowej3$id_grupy),] %>%
+do_przedmiotowej2$id_grupy <- cumsum(!duplicated(do_przedmiotowej2[1]))
+do_przedmiotowej2 <- do_przedmiotowej2[!duplicated(do_przedmiotowej2$id_grupy),] %>%
   mutate(TW_TWORCA_ID = NA,
          TW_NAZWISKO = NA,
-         TW_IMIE = NA)
-  select(id, redaktor_dzialu = osoba)
+         TW_IMIE = NA) %>%
+  select(names(do_przedmiotowej))
 
-do_przedmiotowej <- rbind(do_przedmiotowej,do_przedmiotowej2,do_przedmiotowej3)
+do_przedmiotowej <- rbind(do_przedmiotowej1,do_przedmiotowej2)
+
+### sprawdzić, co dalej da się zrobić
+
+### wymusić ręczne przypisanie dla następujących warunków w 655: teoria - PAULINA, film - OLA - teatr|dramat - MARTA
+###zobaczyć, czy coś ze starego algorytmu się jeszcze nadaje
+#jak ograć pozostały 1000 przedmiotowych?
 
 
 
