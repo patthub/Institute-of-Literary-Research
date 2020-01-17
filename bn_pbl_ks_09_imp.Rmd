@@ -346,7 +346,6 @@ bn_ks <- bn_ks %>%
   full_join(.,osoba_bn_600_pbl,by = "id")
 ```
 
-
 ```{r dalsze przygotowanie zbioru do importu - UKD, słowa kluczowe, poloniki}
 #wskazanie interesujących PBL dziedzin wiedzy po UKD i określenie typu UKD
 bn_ks <- bn_ks %>%
@@ -948,7 +947,7 @@ PBL_rodzaje_zapisow <- dbReadTable(PBL,'PBL_RODZAJE_ZAPISOW')
 bn_ok <- read.csv2("C:/Users/Cezary/Downloads/bn_ok_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
 ```
 
-```{r przypisanie redaktorów do przedmiotowej}
+```{r przypisanie redaktorów do przedmiotowej i podmiotowej}
 przedmiotowa_redaktorzy <- bn_ok %>%
   filter(rodzaj_ksiazki=="przedmiotowa")
 ###przypisanie redaktora na podstawie osoby z 600 jako tematu - książki o twórcy
