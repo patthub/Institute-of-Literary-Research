@@ -1,0 +1,80 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+#biblioteki
+options(java.parameters = "-Xmx32000m")
+options(scipen = 999)
+pacman::p_load(utf8,googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,arrangements,tokenizers,RSelenium)
+
+#pętla
+
+rD <- rsDriver(port=4444L,browser="chrome", chromever="79.0.3945.36")
+remDr <- rD$client
+page <- "http://mak.bn.org.pl/cgi-bin/KHW/makwww.exe?BM=03&IY=05&TY=&IY=01&TY=821&IY=02&TY=&OY=I&SY=szukaj&I1=01&TZ=&I2=&OZ=I&YY=1"
+#tworzenie pustej tabeli
+gotowa_tabela <- data.frame(stringsAsFactors=FALSE)
+x <- 1:165
+y <- c(19,23,27,31,35,39,43,47,51,55)
+remDr$navigate(page)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  for (j in y) {
+    
+  
+  if (i==1) {
+  selector_a <- "body:nth-child(2) font:nth-child(1) form:nth-child(1) > input.submit5:nth-child("
+  selector_b <- j
+  selector_c <- ")"
+  selector <- paste(selector_a,selector_b,selector_c,sep = "")
+  liczba_porzadkowa <- remDr$findElement(using = 'css selector', selector)
+  liczba_porzadkowa$clickElement()
+  symbol_ukd <- remDr$findElement(using = 'css selector', "tr:nth-child(1) b")
+  symbol_ukd <- data.frame(symbol_ukd = as.character(symbol_ukd$getElementText()))
+  gotowa_tabela <- gotowa_tabela %>%
+    bind_rows(.,symbol_ukd)
+  remDr$goBack()
+
+  } else {
+      selector_a <- "body:nth-child(2) font:nth-child(1) form:nth-child(1) > input.submit5:nth-child("
+      selector_b <- j + 1
+      selector_c <- ")"
+      selector <- paste(selector_a,selector_b,selector_c,sep = "")
+      liczba_porzadkowa <- remDr$findElement(using = 'css selector', selector)
+      liczba_porzadkowa$clickElement()
+      symbol_ukd <- remDr$findElement(using = 'css selector', "tr:nth-child(1) b")
+      symbol_ukd <- data.frame(symbol_ukd = as.character(symbol_ukd$getElementText()))
+      gotowa_tabela <- gotowa_tabela %>%
+        bind_rows(.,symbol_ukd)
+      remDr$goBack()
+      
+  }
+    
+    }
+   if (i==1) {
+      dalej <- remDr$findElement(using = 'css selector', "body:nth-child(2) font:nth-child(1) form:nth-child(1) > input.submit6:nth-child(64)")
+      dalej$clickElement()
+      
+    } else {
+      dalej <- remDr$findElement(using = 'css selector', "body:nth-child(2) font:nth-child(1) form:nth-child(1) > input.submit6:nth-child(65)")
+      dalej$clickElement() 
+  }
+  
+  
+}
+
+test <- gotowa_tabela %>%
+  mutate(ukd = str_replace(symbol_ukd,"(.*?)( )(.*)","\\1"),
+         nazwa = str_replace(symbol_ukd,"(.*?)( )(.*)","\\3")) %>%
+  select(ukd,nazwa)
+
+write.csv2(test, "C:/Users/Cezary/Desktop/lista_ukd.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+#pętla while - jeśli przycisk ciąg dalszy jest dostepny, jeśli nie, to koniec
+#w pętli zrobić if i > 1 to do wektora dodać 1
+# wektor 19:55 z przerwą co 4
+```
+
+

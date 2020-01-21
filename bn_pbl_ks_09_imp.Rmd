@@ -941,6 +941,16 @@ PBL_wydawnictwa <- dbReadTable(PBL,'PBL_WYDAWNICTWA') %>%
   filter(nazwa_prosta !="nana")
 
 PBL_rodzaje_zapisow <- dbReadTable(PBL,'PBL_RODZAJE_ZAPISOW')
+
+BN_PBL_lista_literatur <- sheets_read(ss = "1zbwjnrtWGvbjrQTLMavJcWSu7HfP0I-USNgZ_KWiXjc", sheet = "lista ukd bn") %>%
+  filter(!is.na(ukd_ogolne)) %>%
+  select(3:9) %>%
+  cSplit(.,c("pbl_id","pbl_nazwa","redaktor_dzialu","pbl_id_literatury","pbl_literatura"),sep = "|",direction = "long") %>%
+  filter(!is.na(pbl_id))
+
+PBL_hasla_osobowe <- sheets_read(ss = "1zbwjnrtWGvbjrQTLMavJcWSu7HfP0I-USNgZ_KWiXjc", sheet = "pbl_hasla_osobowe") %>%
+  select(2:5)
+colnames(PBL_hasla_osobowe) <- c("DZ_DZIAL_ID","DZ_NAZWA","redaktor_dzialu","nazwa")
 ```
 
 ```{r wczytanie gotowego przetworzonego pliku BN}
@@ -1467,6 +1477,7 @@ do_podmiotowej1 <- rbind(do_podmiotowej1,podmiotowa_redaktorzy)
 podmiotowa_redaktorzy <- bn_ok %>%
   filter(rodzaj_ksiazki=="podmiotowa") %>%
   filter(id %notin% do_podmiotowej1$id)
+
 marc_field_100 <- podmiotowa_redaktorzy %>%
   select(id,X100)%>%
   filter(X100!="") %>%
@@ -1513,14 +1524,89 @@ do_podmiotowej2 <- marc_field_100 %>%
   inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
   left_join(.,PBL_tworcy,by = c("pbl_id"="TW_TWORCA_ID")) %>%
   left_join(.,redaktorzy_dzialow,by = c("TW_DZ_DZIAL_ID"="DZ_DZIAL_ID")) %>%
-  select(id,TW_TWORCA_ID=pbl_id,TW_NAZWISKO,TW_IMIE,TW_DZ_DZIAL_ID,DZ_NAZWA=DZ_NAZWA.x,redaktor_dzialu) %>%
+  select(id,TW_TWORCA_ID=pbl_id,TW_NAZWISKO,TW_IMIE,DZ_DZIAL_ID=TW_DZ_DZIAL_ID,DZ_NAZWA=DZ_NAZWA.x,redaktor_dzialu) %>%
   unique()
+
+###przypisanie autorów podmiotowej do literatur i przypisanie do redaktorów na podstawie kodu literatury z pola X080 i tworzenie nowych twórców na podstawie pola 100
+podmiotowa_redaktorzy <- bn_ok %>%
+  filter(rodzaj_ksiazki=="podmiotowa") %>%
+  filter(id %notin% do_podmiotowej1$id) %>%
+  filter(id %notin% do_podmiotowej2$id)
+
+podmiotowa_redaktorzy <- sqldf("select *
+                            from podmiotowa_redaktorzy a
+                            join BN_PBL_lista_literatur b on a.X080 like ('%'||b.ukd_ogolne||'%')")
+
+###dodawanie nazewnictw nowych twórców
+#100
+marc_field_100 <- podmiotowa_redaktorzy %>%
+  select(id,X100)%>%
+  filter(X100!="") %>%
+  mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X100",sep = "~",direction = "long") %>%
+  filter(X100!="") %>%
+  mutate(X100=str_remove_all(X100,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(podmiotowa_redaktorzy$X100,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_100<-cbind(marc_field_100,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_100$X100 <- str_replace(marc_field_100$X100,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_100$X100),str_replace_all(gsub(string,"\\3",marc_field_100$X100),"\\${2}.", "~"),NA)
+}
+
+marc_field_100 <- marc_field_100 %>%
+  select(id,`$a`) %>%
+  unique() %>%
+  mutate(`$a` = str_remove(`$a`,"(?<=[a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)")) %>%
+  group_by(id) %>%
+  mutate(`$a` = paste(`$a`,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  mutate(TW_NAZWISKO = ifelse(grepl("\\|",`$a`), str_replace_all(str_remove_all(`$a`,","),"\\|",", "),
+                              ifelse(grepl(",",`$a`),str_replace_all(`$a`,"(.*?)(, )(.*)","\\1"),as.character(`$a`))),
+         TW_IMIE = ifelse(grepl("\\|",`$a`),"*",
+                          ifelse(grepl(",",`$a`),str_replace_all(`$a`,"(.*?)(, )(.*)","\\3"),"*"))) %>%
+  select(id,TW_NAZWISKO,TW_IMIE)
+#join na podstawie identycznego id
+podmiotowa_redaktorzy <- podmiotowa_redaktorzy %>%
+  left_join(.,marc_field_100,by="id") %>%
+  mutate(pbl_nazwa = as.character(pbl_nazwa)) %>%
+  mutate(DZ_DZIAL_ID = ifelse(nazwa_prosta=="polsk"&substr(pbl_nazwa,nchar(pbl_nazwa),nchar(pbl_nazwa))!=substr(TW_NAZWISKO,1,1),NA,as.integer(pbl_id))) %>%
+  filter(!is.na(DZ_DZIAL_ID)) %>%
+  arrange(id,DZ_DZIAL_ID)
+
+count <- as.data.frame(table(podmiotowa_redaktorzy$id))
+podmiotowa_redaktorzy <- merge(podmiotowa_redaktorzy,count,by.x = "id",by.y = "Var1") %>%
+  mutate(dlugosc = nchar(ukd_ogolne)) %>%
+  arrange(-Freq,id,-dlugosc,pbl_id)
+podmiotowa_redaktorzy$same <- cumsum(!duplicated(podmiotowa_redaktorzy[1]))
+do_podmiotowej3 <- podmiotowa_redaktorzy[!duplicated(podmiotowa_redaktorzy$same),] %>%
+  mutate(TW_TWORCA_ID = NA) %>%
+  rename(DZ_NAZWA = pbl_nazwa) %>%
+  select(id,TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE,DZ_DZIAL_ID,DZ_NAZWA,redaktor_dzialu)
 
 ###przypisanie autorów podmiotowej do literatur i przypisanie do redaktorów na podstawie literatury z pola 655 i tworzenie nowych twórców na podstawie pola 100
 podmiotowa_redaktorzy <- bn_ok %>%
   filter(rodzaj_ksiazki=="podmiotowa") %>%
   filter(id %notin% do_podmiotowej1$id) %>%
-  filter(id %notin% do_podmiotowej2$id)
+  filter(id %notin% do_podmiotowej2$id) %>%
+  filter(id %notin% do_podmiotowej3$id)
 
 #655
 marc_field_655 <- podmiotowa_redaktorzy %>%
@@ -1557,22 +1643,6 @@ for (i in x) {
 marc_field_655 <- marc_field_655 %>%
   select(id,`$a`) %>%
   unique()
-
-PBL_hasla_osobowe <- PBL_dzialy_path %>%
-  filter(grepl("osobow",DZ_NAZWA)) %>%
-  select(DZ_DZIAL_ID,DZ_NAZWA) %>%
-  left_join(.,redaktorzy_dzialow,by = "DZ_DZIAL_ID") %>%
-  select(1,DZ_NAZWA = 2,4) %>%
-  filter(DZ_DZIAL_ID!=148) %>%
-  group_by(DZ_DZIAL_ID) %>%
-  mutate(nazwa = paste(trim(unlist(str_extract_all(DZ_NAZWA,"(?<=\\()(.*?)(?=\\(|\\))"))),collapse = "|"),
-         nazwa = str_remove_all(nazwa,"(.)(?=\\||$)"),
-         nazwa = str_remove(nazwa,"literatur. ")) %>%
-  ungroup()
-
-reczne <- data.frame(DZ_DZIAL_ID = c(697,697,697,697,825,1990,1187,1454,884,902,544,544,544,544,544,792,697,1133,544),DZ_NAZWA = c("Hasła osobowe (brytyjska i irlandzka)","Hasła osobowe (brytyjska i irlandzka)","Hasła osobowe (brytyjska i irlandzka)","Hasła osobowe (brytyjska i irlandzka)","Hasła osobowe (grecka starożytna)","Hasła osobowe (łacińska średniowieczna)","Hasła osobowe (syryjska)","Hasła osobowe (esperanto)","Hasła osobowe (holenderska)","Hasła osobowe (Indii)","Hasła osobowe (Afryki Subsaharyjskiej)","Hasła osobowe (Afryki Subsaharyjskiej)","Hasła osobowe (Afryki Subsaharyjskiej)","Hasła osobowe (Afryki Subsaharyjskiej)","Hasła osobowe (Afryki Subsaharyjskiej)", "Hasła osobowe (egipsko-arabska)", "Hasła osobowe (brytyjska i irlandzka)","Hasła osobowe (palestyńsko-arabska)","Hasła osobowe (Afryki Subsaharyjskiej)"), redaktor_dzialu = c("BEATAK","BEATAK","BEATAK","BEATAK","BEATAS","BEATAS","BEATAD","CEZARY","TOMASZU","EWA","EWA","EWA","EWA","EWA","EWA","BEATAD","BEATAK","BEATAD","EWA"), nazwa = c("angielsk","szkock","irlandzk","walijsk","greck","łacińsk","syryjsk","esperanck","niderlandzk","indyjsk","południowoafryka","senegalsk","nigeryjsk","afrykańsk","ruandyjsk","egipsk. nowożytn","celtyck","palestyńsk","somalijsk"))
-
-PBL_hasla_osobowe <- rbind(PBL_hasla_osobowe,reczne)
 
 marc_field_655 <- sqldf("select *
                             from marc_field_655 a
@@ -1632,7 +1702,7 @@ marc_field_655 <- marc_field_655 %>%
   arrange(id,DZ_DZIAL_ID)
     
 marc_field_655$same <- cumsum(!duplicated(marc_field_655[1]))
-do_podmiotowej3 <- marc_field_655[!duplicated(marc_field_655$same),] %>%
+do_podmiotowej4 <- marc_field_655[!duplicated(marc_field_655$same),] %>%
   select(id,DZ_DZIAL_ID,DZ_NAZWA,TW_NAZWISKO,TW_IMIE,redaktor_dzialu) %>%
   filter(!is.na(DZ_DZIAL_ID)) %>%
   mutate(TW_TWORCA_ID = NA) %>%
@@ -1643,7 +1713,8 @@ podmiotowa_redaktorzy <- bn_ok %>%
   filter(rodzaj_ksiazki=="podmiotowa") %>%
   filter(id %notin% do_podmiotowej1$id) %>%
   filter(id %notin% do_podmiotowej2$id) %>%
-  filter(id %notin% do_podmiotowej3$id)
+  filter(id %notin% do_podmiotowej3$id) %>%
+  filter(id %notin% do_podmiotowej4$id)
 
 #650
 marc_field_650 <- podmiotowa_redaktorzy %>%
@@ -1690,7 +1761,7 @@ marc_field_650 <- sqldf("select *
   arrange(id,DZ_DZIAL_ID)
 
 marc_field_650$same <- cumsum(!duplicated(marc_field_650[1]))
-do_podmiotowej4 <- marc_field_650[!duplicated(marc_field_650$same),] %>%
+do_podmiotowej5 <- marc_field_650[!duplicated(marc_field_650$same),] %>%
   select(id,DZ_DZIAL_ID,DZ_NAZWA,TW_NAZWISKO,TW_IMIE,redaktor_dzialu) %>%
   filter(!is.na(DZ_DZIAL_ID)) %>%
   mutate(TW_TWORCA_ID = NA) %>%
@@ -1701,523 +1772,192 @@ podmiotowa_redaktorzy <- bn_ok %>%
   filter(id %notin% do_podmiotowej1$id) %>%
   filter(id %notin% do_podmiotowej2$id) %>%
   filter(id %notin% do_podmiotowej3$id) %>%
-  filter(id %notin% do_podmiotowej4$id)
-###zbudować słownik literatur z UKD i przeanalizować pole 080
+  filter(id %notin% do_podmiotowej4$id) %>%
+  filter(id %notin% do_podmiotowej5$id)
+#naddatek przypisać Karolinie jako podmiotową bez twórców i czy_automatycznie <- nie
+do_podmiotowej6 <- podmiotowa_redaktorzy %>%
+  mutate(TW_TWORCA_ID = NA,
+         TW_NAZWISKO = NA,
+         TW_IMIE = NA,
+         DZ_DZIAL_ID = NA,
+         DZ_NAZWA = NA,
+         redaktor_dzialu = "KAROLINA") %>%
+  select(names(do_podmiotowej5))
+#trzeba zaktualizować w bn_ok, że teraz to nie są automatyczne
+lista_do_przepisania <- do_podmiotowej6$id
+bn_ok$czy_automatycznie[bn_ok$id %in% lista_do_przepisania] <- "nie"
+#połączenie przydziału podmiotowych w jeden plik
+do_podmiotowej <- rbind(do_podmiotowej1,do_podmiotowej2,do_podmiotowej3,do_podmiotowej4,do_podmiotowej5,do_podmiotowej6)
 
+#przypisanie antologii do Tomka i do literatur na podstawie 080
+antologie_redaktorzy <- bn_ok %>%
+  filter(rodzaj_ksiazki == "antologia")
+PBL_dzialy_antologie <- PBL_dzialy_path %>%
+  filter(grepl("antolog",DZ_NAZWA,ignore.case = TRUE)) %>%
+  left_join(.,redaktorzy_dzialow,by="DZ_DZIAL_ID") %>%
+  select(DZ_DZIAL_ID,DZ_NAZWA=DZ_NAZWA.x,redaktor_dzialu) %>%
+  mutate(redaktor_dzialu = ifelse(is.na(redaktor_dzialu),"TOMASZ",as.character(redaktor_dzialu)))
 
+PBL_dzialy_antologie <- sqldf("select *
+                            from PBL_dzialy_antologie a
+                            left join BN_PBL_lista_literatur b on a.DZ_NAZWA like ('%'||b.nazwa_prosta||'%')") %>%
+  mutate(ukd_ogolne = ifelse(DZ_DZIAL_ID==146,"821.162.1",as.character(ukd_ogolne)),
+         nazwa_prosta = ifelse(DZ_DZIAL_ID==146,"polsk",as.character(nazwa_prosta))) %>%
+  filter(!is.na(ukd_ogolne)) %>%
+  filter(DZ_DZIAL_ID!=744) %>%
+  select(1:5) 
 
-###przypisanie autorów podmiotowej do literat literatury polskiej i przypisanie do redaktorów na podstawie literatury z pola 655
+antologie_redaktorzy <- sqldf("select *
+                            from antologie_redaktorzy a
+                            join PBL_dzialy_antologie b on a.X080 like ('%'||b.ukd_ogolne||'%')")
 
-literatura_dz <- data.frame(literatura_dz, pol_osob = ifelse(literatura_dz$nazwa == "polsk" & substr(literatura_dz$tw_nazwisko,1,1)==str_sub(literatura_dz$DZ_NAZWA,nchar(as.character(literatura_dz$DZ_NAZWA)),nchar(as.character(literatura_dz$DZ_NAZWA))),TRUE,FALSE), pol = ifelse(literatura_dz$nazwa == "polsk", TRUE, FALSE))
-literatura_dz <- literatura_dz %>%
-  filter(pol_osob == TRUE | pol == FALSE) %>%
-  select(-9,-10,-11)
+count <- as.data.frame(table(antologie_redaktorzy$id))
+antologie_redaktorzy <- merge(antologie_redaktorzy,count,by.x = "id",by.y = "Var1") %>%
+  mutate(dlugosc = nchar(ukd_ogolne)) %>%
+  arrange(-Freq,id,-dlugosc,DZ_DZIAL_ID)
+antologie_redaktorzy$same <- cumsum(!duplicated(antologie_redaktorzy[1]))
+do_antologii1 <- antologie_redaktorzy[!duplicated(antologie_redaktorzy$same),] %>%
+  mutate(TW_TWORCA_ID = NA,
+         TW_NAZWISKO = NA,
+         TW_IMIE = NA) %>%
+  select(id,TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE,DZ_DZIAL_ID,DZ_NAZWA,redaktor_dzialu)
+#przypisanie antologii do Tomka i do literatur na podstawie 665
+antologie_redaktorzy <- bn_ok %>%
+  filter(rodzaj_ksiazki == "antologia") %>%
+  filter(id %notin% do_antologii1$id)
 
-literatura_dz2 <- data.frame(literatura_dz2, pol_osob = ifelse(literatura_dz2$nazwa == "polsk" & substr(literatura_dz2$tw_nazwisko,1,1)==str_sub(literatura_dz2$DZ_NAZWA,nchar(as.character(literatura_dz2$DZ_NAZWA)),nchar(as.character(literatura_dz2$DZ_NAZWA))),TRUE,FALSE), pol = ifelse(literatura_dz2$nazwa == "polsk", TRUE, FALSE))
-literatura_dz2 <- literatura_dz2 %>%
-  filter(pol_osob == TRUE | pol == FALSE) %>%
-  select(-9,-10,-11)
+marc_field_655 <- antologie_redaktorzy %>%
+  select(id,X655)%>%
+  filter(X655!="") %>%
+  mutate(X655=str_replace_all(X655,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X655",sep = "~",direction = "long") %>%
+  filter(X655!="") %>%
+  mutate(X655=str_remove_all(X655,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X655,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(antologie_redaktorzy$X655,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_655)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_655<-cbind(marc_field_655,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
 
-literatura_dz <- rbind(literatura_dz,literatura_dz2) %>%
-  select(-X655,-X650) %>%
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_655$X655 <- str_replace(marc_field_655$X655,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_655[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_655$X655),str_replace_all(gsub(string,"\\3",marc_field_655$X655),"\\${2}.", "~"),NA)
+}
+
+marc_field_655 <- marc_field_655 %>%
+  select(id,`$a`) %>%
   unique()
-literatura_dz <- literatura_dz[order(literatura_dz$licznik,literatura_dz$tw_nazwisko,literatura_dz$tw_imie,literatura_dz$DZ_DZIAL_ID),]
-literatura_dz %$%  
-    { licznik == dplyr::lag(licznik, 1) } %>% 
-    as.numeric() %>% 
-    {.} -> literatura_dz$same
-literatura_dz$same[1] <- 0
-literatura_dz <- literatura_dz %>%
-  filter(same==0) %>%
-  select(-length(literatura_dz))
-colnames(BN_PBL_tworca_podm)[6:7] <- c("TW_NAZWISKO_ORACLE", "TW_IMIE_ORACLE")
 
+marc_field_655 <- sqldf("select *
+                            from marc_field_655 a
+                            left join PBL_dzialy_antologie b on a.`$a` like ('%'||b.nazwa_prosta||'%')") %>%
+  filter(!is.na(DZ_DZIAL_ID)) %>%
+  arrange(id,DZ_DZIAL_ID)
 
+marc_field_655$same <- cumsum(!duplicated(marc_field_655[1]))
+do_antologii2 <- marc_field_655[!duplicated(marc_field_655$same),] %>%
+  select(id,DZ_DZIAL_ID,DZ_NAZWA,redaktor_dzialu) %>%
+  filter(!is.na(DZ_DZIAL_ID)) %>%
+  mutate(TW_TWORCA_ID = NA,
+         TW_NAZWISKO = NA,
+         TW_IMIE = NA) %>%
+  select(names(do_antologii1))
+#przypisanie antologii do Tomka i do literatur na podstawie 665
+antologie_redaktorzy <- bn_ok %>%
+  filter(rodzaj_ksiazki == "antologia") %>%
+  filter(id %notin% do_antologii1$id) %>%
+  filter(id %notin% do_antologii2$id)
 
+marc_field_650 <- antologie_redaktorzy %>%
+  select(id,X650)%>%
+  filter(X650!="") %>%
+  mutate(X650=str_replace_all(X650,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X650",sep = "~",direction = "long") %>%
+  filter(X650!="") %>%
+  mutate(X650=str_remove_all(X650,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X650,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(antologie_redaktorzy$X650,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_650)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_650<-cbind(marc_field_650,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
 
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_650$X650 <- str_replace(marc_field_650$X650,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_650[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_650$X650),str_replace_all(gsub(string,"\\3",marc_field_650$X650),"\\${2}.", "~"),NA)
+}
 
-#przypisanie podmiotowej i przedmiotowej
+marc_field_650 <- marc_field_650 %>%
+  select(id,`$a`) %>%
+  unique()
+
+marc_field_650 <- sqldf("select *
+                            from marc_field_650 a
+                            left join PBL_dzialy_antologie b on a.`$a` like ('%'||b.nazwa_prosta||'%')") %>%
+  filter(!is.na(DZ_DZIAL_ID)) %>%
+  arrange(id,DZ_DZIAL_ID)
+
+marc_field_650$same <- cumsum(!duplicated(marc_field_650[1]))
+do_antologii3 <- marc_field_650[!duplicated(marc_field_650$same),] %>%
+  select(id,DZ_DZIAL_ID,DZ_NAZWA,redaktor_dzialu) %>%
+  filter(!is.na(DZ_DZIAL_ID)) %>%
+  mutate(TW_TWORCA_ID = NA,
+         TW_NAZWISKO = NA,
+         TW_IMIE = NA) %>%
+  select(names(do_antologii1))
+#reszta antologii bez działu po prostu przypisana do Tomka
+antologie_redaktorzy <- bn_ok %>%
+  filter(rodzaj_ksiazki == "antologia") %>%
+  filter(id %notin% do_antologii1$id) %>%
+  filter(id %notin% do_antologii2$id) %>%
+  filter(id %notin% do_antologii3$id)
+
+do_antologii4 <- antologie_redaktorzy %>%
+  mutate(TW_TWORCA_ID = NA,
+         TW_NAZWISKO = NA,
+         TW_IMIE = NA,
+         DZ_DZIAL_ID = NA,
+         DZ_NAZWA = NA,
+         redaktor_dzialu = "TOMASZ") %>%
+  select(names(do_antologii1))
+
+do_antologii <- rbind(do_antologii1,do_antologii2,do_antologii3,do_antologii4)
+#połączenie przydziałów w jeden plik
+redaktorzy_zapisow <- rbind(do_podmiotowej,do_przedmiotowej,do_antologii)
+#połączenie przypisania ze zbiorem 
 bn_ok <- bn_ok %>%
-  left_join(.,do_przedmiotowej,by="id")
-#i join z do podmiotowej
+  left_join(.,redaktorzy_zapisow,by="id")
 
+#co ze współwydaniami???
 
-
-
-
-
-
-
-
-nie_poloniki <- bn_ok %>%
-  filter(if (X501=="") !grepl("pl",substr(X008,16,18))) %>%
-  filter(!grepl("pol",substr(X008,36,38))) %>%
-  filter(!grepl("pol",X041)) %>%
-  filter(!grepl("pl",X044)) %>%
-  filter(!grepl("pol",X500,ignore.case = TRUE)) %>%
-  filter(!grepl("pol",X501,ignore.case = TRUE)) %>%
-  filter(!grepl("pol",X546,ignore.case = TRUE)) %>%
-  select(id) %>%
-  mutate(czy_polonik = "nie") %>%
-  unique()
-###koniec?
-
-test <- przedmiotowa %>%
-  mutate(redaktor_dzialu = ifelse(is.na(redaktor_dzialu),"nikt",as.character(redaktor_dzialu)))
-
-count <- as.data.frame(table(test$redaktor_dzialu)) %>%
-  arrange(-Freq)
-
-test <- test %>%
-  filter(redaktor_dzialu=="nikt")
-
-###tutaj dalej sprawdzać
-
-test <- przedmiotowa %>%
-  filter(grepl("x",redaktor_dzialu)) %>%
-  select(id,X080,X100,X245,X600,X650,X655,redaktor_dzialu)
-
-
-#wymuszenie przypisania dla teorii, filmu i teatru
-
-
-#tutaj podsumowanie i szukam, co jeszcze da się zrobić
-test <- merge(przedmiotowa,do_przedmiotowej,by = "id",all.x = TRUE) %>%
-  filter(is.na(redaktor_dzialu)) %>%
-  select(id,X080,X100,X245,X600,X650,X655)
-
-
-przedmiotowa <- bn_ok %>%
-  filter(rodzaj_ksiazki=="przedmiotowa")
-
-
-
-#to będzie chyba potrzebne na końcu
-#przedmiotowa_redaktorzy <- bn_ok %>%
-#  filter(rodzaj_ksiazki=="przedmiotowa") %>%
-#  left_join(.,do_przedmiotowej,by="id")
-
-### sprawdzić, co dalej da się zrobić
-
-### wymusić ręczne przypisanie dla następujących warunków w 655: teoria - PAULINA, film - OLA - teatr - MARTA
-###zobaczyć, czy coś ze starego algorytmu się jeszcze nadaje
-#jak ograć pozostały 1000 przedmiotowych?
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-test <- data.frame(stringsAsFactors = FALSE)
-
-
-do_przedmiotowej2 <- do_przedmiotowej2 %>%
-  filter(!is.na(deskryptor_osoba))
-
-do_przedmiotowej2$deskryptor_osoba <- ifelse(grepl(deskryptory655$Var1[8],do_przedmiotowej2$X655),as.character(deskryptory655$Var2)[i],NA)
-
-grepl("a.*b", x)
-  
-  
-  
-  
-#automatycznie działowanie przedmiotowej na podstawie dotychczasowych importów - czy to się tu przyda?
-do_dzialowania <- data.frame(id = as.integer(), X650 = as.character(), X655 = as.character(), stringsAsFactors = FALSE)
-x <- 1:length(poprzednie_importy$id)
-for (i in x){
-  progress(match(i,x), max.value = length(x)) 
-    if (is.na(poprzednie_importy$X650[i])&!is.na(poprzednie_importy$X655[i])){
-      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X655[i],"\\|")), str_count(poprzednie_importy$X655[i],"\\|")+1)) %>%
-        unite(data=.,col = "permutation", sep = "|") %>%
-        mutate(X650 = NA,
-               X655 = permutation,
-               id = poprzednie_importy$id[i]) %>%
-        select(id,X650,X655)
-      do_dzialowania <- rbind(do_dzialowania,permutations)
-    } else if (is.na(poprzednie_importy$X655[i])&!is.na(poprzednie_importy$X650[i])){
-      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X650[i],"\\|")), str_count(poprzednie_importy$X650[i],"\\|")+1)) %>%
-        unite(data=.,col = "permutation", sep = "|") %>%
-        mutate(X650 = permutation,
-               X655 = NA,
-               id = poprzednie_importy$id[i]) %>%
-        select(id,X650,X655)
-      do_dzialowania <- rbind(do_dzialowania,permutations)
-    } else {
-      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X650[i],"\\|")), str_count(poprzednie_importy$X650[i],"\\|")+1)) %>%
-        unite(data=.,col = "permutation", sep = "|") %>%
-        mutate(X650 = permutation,
-               id = poprzednie_importy$id[i]) %>%
-        select(id,X650)
-      permutations650 <- data.frame(stringsAsFactors = FALSE)
-      permutations650 <- rbind(permutations650,permutations)
-      permutations <- as.data.frame(permutations(unlist(str_split(poprzednie_importy$X655[i],"\\|")), str_count(poprzednie_importy$X655[i],"\\|")+1)) %>%
-        unite(data=.,col = "permutation", sep = "|") %>%
-        mutate(X655 = permutation,
-               id = poprzednie_importy$id[i]) %>%
-        select(id,X655)
-      permutations655 <- data.frame(stringsAsFactors = FALSE)
-      permutations655 <- rbind(permutations655,permutations)
-      permutations <- merge(permutations650,permutations655,by = "id",all = TRUE) %>%
-        select(id,X650,X655)
-      do_dzialowania <- rbind(do_dzialowania,permutations)
-    }
-}
-
-do_dzialowania <- do_dzialowania %>%
-  full_join(.,poprzednie_importy %>% select(id,DZ_DZIAL_ID,DZ_NAZWA),by = "id") %>%
-  select(-id)
-do_dzialowania[is.na(do_dzialowania)] <- ""
-tutaj sprawdzić
-do_dzialowania_przedm <- merge(bn_ok %>% filter(czy_automatycznie=="nie"&rodzaj_ksiazki=="przedmiotowa"),do_dzialowania, by = c("X650","X655")) %>%
-  select(id,DZ_DZIAL_ID,DZ_NAZWA)
-
-###tu się kończy automatyczne sprzed dwóch dni
-
-
-
-######text mining frequency
-#wyznaczenie zbioru
-
-lista_pracownikow <- poprzednie_importy$pracownik_pbl %>%
-  unique()
-frekwencja <- data.frame(stringsAsFactors = FALSE)
-
-for (pracownik in lista_pracownikow) {
-  progress(match(pracownik,lista_pracownikow), max.value = length(lista_pracownikow)) 
-  osoba1 <- poprzednie_importy %>%
-    filter(pracownik_pbl == pracownik) %>%
-    select(kolumna = X650)
-  osoba2 <- poprzednie_importy %>%
-    filter(pracownik_pbl == pracownik) %>%
-    select(kolumna = X655)
-  osoba <- rbind(osoba1,osoba2) %>%
-    filter(!is.na(kolumna)) %>%
-    cSplit(.,"kolumna",sep = "|",direction = "long") %>%
-    mutate(kolumna = str_remove_all(kolumna,"\\\\7\\$a"),
-         kolumna = str_remove_all(kolumna,"\\$2DBN"),
-         kolumna = str_replace_all(kolumna,"\\$.|\\|"," "))
-  osoba <- paste(unlist(osoba), collapse = "@")
-  osoba <- as.data.frame(tokenize_ngrams(osoba, n = 3,lowercase = FALSE))
-  colnames(osoba) <- "sentence"
-  osoba <- as.data.frame(table(osoba$sentence)) %>%
-    mutate(pracownik = pracownik)
-  frekwencja <- rbind(frekwencja,osoba)
-}
-
-test <- frekwencja %>%
-  filter(!grepl("polsk|literat",Var1)) %>%
-  arrange(-Freq) %>%
-  mutate(Var1 = str_replace_all(Var1," ",".*"))
-
-grepl("a.*b", x)
-
-
-
-
-#  group_by_at(vars(X650:DZ_NAZWA)) %>%
-#  mutate(ZA_STATUS_IMP = paste(ZA_STATUS_IMP,collapse = "|")) %>%
-#  ungroup() %>%
-#  unique() %>%
-#  ungroup() %>%
-#  filter(!grepl("\\|",DZ_DZIAL_ID)) %>%
-#  filter(grepl("IOK",ZA_STATUS_IMP)) %>%
-#  filter(!grepl("INO|IMP|IPN|IPC",ZA_STATUS_IMP)) %>%
-#  filter(!grepl("osobowe",DZ_NAZWA)) %>%
-#  filter(!(is.na(X650)&is.na(X655))) %>%
-#  mutate(ile650 = str_count(X650,"\\|")+1,
-#         ile655 = str_count(X655,"\\|")+1) %>%
-#  filter(ile650<=10|ile655<=10) %>%
-#  select(-ile650,-ile655) %>%
-#  mutate(ile_statusow = str_count(ZA_STATUS_IMP,"\\|")+1) %>%
-#  arrange(X655,X650,-ile_statusow)
-
-
-
-
-
-
-
-
-
-
-
-ania1 <- poprzednie_importy %>%
-  select(kolumna = X650)
-ania2 <- poprzednie_importy %>%
-  select(kolumna = X655)
-ania <- rbind(ania1,ania2) %>%
-  filter(!is.na(kolumna)) %>%
-  unique() %>%
-  cSplit(.,"kolumna",sep = "|",direction = "long") %>%
-  mutate(kolumna = str_remove_all(kolumna,"\\\\7\\$a"),
-         kolumna = str_remove_all(kolumna,"\\$2DBN"),
-         kolumna = str_replace_all(kolumna,"\\$."," ")) %>%
-  unique()
-
-avector <- ania[,1]
-
-###tutorial
-# Install
-install.packages("tm")  # for text mining
-install.packages("SnowballC") # for text stemming
-install.packages("wordcloud") # word-cloud generator 
-install.packages("RColorBrewer") # color palettes
-# Load
-library("tm")
-library("SnowballC")
-library("wordcloud")
-library("RColorBrewer")
-
-
-avector <- Corpus(VectorSource(avector))
-
-dtm <- TermDocumentMatrix(avector)
-m <- as.matrix(dtm)
-v <- sort(rowSums(m),decreasing=TRUE)
-d <- data.frame(word = names(v),freq=v)
-head(d, 10)
-
-
-
-
-
-###TUTAJ
-
-
-
-
-
-
-
-
-
-
-colnames(przedmiotowe)[234] <- "pracownik.w"
-
-
-przedmiotowe$pracownik.z[grepl("\\$y", przedmiotowe$X655)|grepl("\\$y", przedmiotowe$X650)] <- "GOSIA"
-przedmiotowe$pracownik.z[grepl("\\$y20 w.|\\$y20-21 w.|\\$y21 w.",przedmiotowe$X655)|grepl("\\$y20 w.|\\$y20-21 w.|\\$y21 w.",przedmiotowe$X650)] <- "PAULINA"
-przedmiotowe$pracownik.z[grepl("interpretac", przedmiotowe$X655,ignore.case = TRUE)|grepl("interpretac", przedmiotowe$X650,ignore.case = TRUE)] <- "PAULINA"
-przedmiotowe$pracownik.z[grepl("dziec", przedmiotowe$X655,ignore.case = TRUE)|grepl("dziec", przedmiotowe$X650,ignore.case = TRUE)] <- "BARBARAW"
-przedmiotowe$pracownik.z[grepl("Wydawnictw", przedmiotowe$X655)] <- "BARBARAW"
-przedmiotowe$pracownik.z[grepl("chrze?cija|religij|duszpast|liturgi|ko?cieln|B?g|w Biblii|apostol|katolic|papie?|papies", przedmiotowe$X655,ignore.case = TRUE)|grepl("chrze?cija|religij|duszpast|liturgi|ko?cieln|B?g|w Biblii|apostol|katolic|papie?|papies", przedmiotowe$X650,ignore.case = TRUE)] <- "BEATAS"
-przedmiotowe$pracownik.z[grepl("nauczyciel|pedagog|szkoln|szk??|gimnazj|podr?czn", przedmiotowe$X655,ignore.case = TRUE)|grepl("nauczyciel|pedagog|szkoln|szk??|gimnazj|podr?czn", przedmiotowe$X650,ignore.case = TRUE)] <- "KAROLINA"
-przedmiotowe$pracownik.z[grepl("filozof|antropolog",przedmiotowe$X655,ignore.case = TRUE)|grepl("filozof|antropolog",przedmiotowe$X655,ignore.case = TRUE)] <- "PAULINA"
-przedmiotowe$pracownik.z[grepl("sceniczn", przedmiotowe$X655,ignore.case = TRUE)|grepl("sceniczn", przedmiotowe$X650,ignore.case = TRUE)] <- "MARTAK"
-przedmiotowe$pracownik.z[grepl("telewiz", przedmiotowe$X655,ignore.case = TRUE)|grepl("telewiz", przedmiotowe$X650,ignore.case = TRUE)] <- "EWA"
-przedmiotowe$pracownik.z[grepl("radio", przedmiotowe$X655,ignore.case = TRUE)|grepl("radio", przedmiotowe$X650,ignore.case = TRUE)] <- "EWA"
-przedmiotowe$pracownik.z[grepl("film|Film", przedmiotowe$X655,ignore.case = TRUE)|grepl("film|Film", przedmiotowe$X650,ignore.case = TRUE)] <- "EWA"
-przedmiotowe$pracownik.z[grepl("konkursy i festiwale", przedmiotowe$X655,ignore.case = TRUE)|grepl("konkursy i festiwale", przedmiotowe$X650,ignore.case = TRUE)] <- "KAROLINA"
-przedmiotowe$pracownik.z[grepl("historia", przedmiotowe$X655,ignore.case = TRUE)|grepl("historia", przedmiotowe$X650,ignore.case = TRUE)] <- "GOSIA"
-przedmiotowe$pracownik.z[grepl("Teatr|teatr|Aktor|aktor", przedmiotowe$X650)] <- "MARTAK"
-przedmiotowe$pracownik.z[grepl("Literatura polska\\$xhistoria\\$y21 w", przedmiotowe$X655)] <- "PAULINA"
-przedmiotowe$pracownik.z[grepl("Dramat polski", przedmiotowe$X655)] <- "GOSIA"
-przedmiotowe$pracownik.z[grepl("Dramat polski", przedmiotowe$X655)&grepl("\\$y20 w.|\\$y20-21 w.|\\$y21 w.",przedmiotowe$X655)] <- "PAULINA"
-przedmiotowe$pracownik.z[grepl("Poezja polska", przedmiotowe$X655)] <- "GOSIA"
-przedmiotowe$pracownik.z[grepl("Poezja polska", przedmiotowe$X655)&grepl("\\$y20 w.|\\$y20-21 w.|\\$y21 w.",przedmiotowe$X655)] <- "PAULINA"
-przedmiotowe$pracownik.z[grepl("Proza polska", przedmiotowe$X655)] <- "GOSIA"
-przedmiotowe$pracownik.z[grepl("Proza polska", przedmiotowe$X655)&grepl("\\$y20 w.|\\$y20-21 w.|\\$y21 w.",przedmiotowe$X655)] <- "PAULINA"
-przedmiotowe$pracownik.z[grepl("Literatura\\$xteoria", przedmiotowe$X655)] <- "PAULINA"
-przedmiotowe$pracownik.z[grepl("biblijn", przedmiotowe$X655)|grepl("Biblistyka", przedmiotowe$X650)] <- "BEATAS"
-przedmiotowe$pracownik.z[grepl("Literatura polska\\$xhistoria", przedmiotowe$X655)] <- "GOSIA"
-przedmiotowe$pracownik.z[grepl("w literaturze polskiej|w literaturze", przedmiotowe$X650)] <- "GOSIA"
-przedmiotowe$pracownik.z[grepl("Scenariusze zaj??", przedmiotowe$X655)] <- "KAROLINA"
-przedmiotowe$pracownik.z[grepl("Materia?y pomocnicze", przedmiotowe$X655)] <- "KAROLINA"
-przedmiotowe$pracownik.z[grepl("Wydawnictwa", przedmiotowe$X650)] <- "BARBARAW"
-przedmiotowe$pracownik.z[grepl("Czasopisma|Bibliografia zawarto?ci czasopism", przedmiotowe$X655)] <- "TOMASZ"
-przedmiotowe$pracownik.z[grepl("Stare druki|R?kopisy|Inkunabu?y|Inwentarz|Bibliografia|S?ownik", przedmiotowe$X655)] <- "IZA"
-
-przedmiotowe$pracownik.x[is.na(przedmiotowe$pracownik.x)] <- ""
-przedmiotowe$pracownik.y[is.na(przedmiotowe$pracownik.y)] <- ""
-przedmiotowe$pracownik.w[is.na(przedmiotowe$pracownik.w)] <- ""
-przedmiotowe$pracownik.z[is.na(przedmiotowe$pracownik.z)] <- ""
-przedmiotowe$pracownik <- paste(przedmiotowe$pracownik.x, przedmiotowe$pracownik.y, przedmiotowe$pracownik.w, przedmiotowe$pracownik.z,sep = "|")
-przedmiotowe$pracownik <- str_remove(przedmiotowe$pracownik, "^\\|+")
-przedmiotowe$pracownik <- str_replace(przedmiotowe$pracownik,"(.*?)(\\|.*)","\\1")
-
-pracownik_ekstra <- data.frame(pracownik = as.character(),stringsAsFactors = FALSE)
-pracownik <- c("EWAx","ANIAx","CEZARYx","OLAx","MARTAKx","TOMASZUx","TOMASZx")
-powtorzenie <- c(200,454,200,908,908,908,908)
-x <- 1:length(pracownik)
-for (i in x) {
-pracownik_i <- data.frame(pracownik = rep(pracownik[i], powtorzenie[i]))
-pracownik_ekstra <-rbind(pracownik_ekstra,pracownik_i)
-}
-
-
-x <- which(przedmiotowe$pracownik=="", arr.ind=TRUE)
-for (i in x) {
-przedmiotowe$pracownik[i] <- as.character(pracownik_ekstra$pracownik[match(i,x)])
-}
-
-colnames(przedmiotowe)[233] <- "pracownik.yz"
-przedmiotowe <- przedmiotowe %>%
-  select(-pracownik.x,-pracownik.yz,-pracownik.y,-pracownik.w,-pracownik.z,-licznik)
-
-#statystyka <- sqldf("select count (*), a.pracownik from przedmiotowe a group by a.pracownik")
-podmiotowe$id <- is.numeric(podmiotowe$id)
-przedmiotowe$id <- format(przedmiotowe$id)
-reszta$id <- format(reszta$id)
-antologie$id <- format(antologie$id)
-
-
-write.csv2(podmiotowe, "C:/Users/Cezary/Desktop/podmiotowe.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-write.csv2(przedmiotowe, "C:/Users/Cezary/Desktop/przedmiotowe.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-write.csv2(antologie, "C:/Users/Cezary/Desktop/antologie.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-write.csv2(reszta, "C:/Users/Cezary/Desktop/reszta.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
-podmiotowe <- read.csv2("C:/Users/cezar/Documents/PBL/Import danych z zewn?trz/Biblioteka Narodowa/2005_2008/podmiotowe.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-przedmiotowe <- read.csv2("C:/Users/cezar/Documents/PBL/Import danych z zewn?trz/Biblioteka Narodowa/2005_2008/przedmiotowe.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-antologie <- read.csv2("C:/Users/cezar/Documents/PBL/Import danych z zewn?trz/Biblioteka Narodowa/2005_2008/antologie.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
-reszta <- read.csv2("C:/Users/cezar/Documents/PBL/Import danych z zewn?trz/Biblioteka Narodowa/2005_2008/reszta.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) 
 
 
 ```
-
-```{r przypisanie redaktorów do książek podmiotowych}
-###czy to dobre miejsce?
-#czy nie powinno być przetwarzane razem z innymi elementami książek, pkt. 12?
-podmiotowa_redaktorzy <- bn_ok %>%
-  filter(rodzaj_ksiazki=="podmiotowa"&X100!=""&!grepl("\\|",X100))
-
-#100
-marc_field_100 <- podmiotowa_redaktorzy %>%
-  select(id,X100)%>%
-  filter(X100!="") %>%
-  mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
-  cSplit(.,"X100",sep = "~",direction = "long") %>%
-  filter(X100!="") %>%
-  mutate(X100=str_remove_all(X100,"^\\|")) %>%
-  mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(podmiotowa_redaktorzy$X100,"\\$.")
-subfield_list<- unique(unlist(subfield_list))
-empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
-colnames(empty_table) <-subfield_list
-marc_field_100<-cbind(marc_field_100,empty_table)
-subfield_list_char <- paste("(",subfield_list,")",sep = "")
-subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
-
-x <- 1:length(subfield_list)
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  marc_field_100$X100 <- str_replace(marc_field_100$X100,subfield_list_char[i],"|\\1")
-}
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-  string_a <- "(^)(.*?\\|"
-  string_b <- subfield_list_char2[i]
-  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-  string <- paste(string_a,string_b,string_c,sep = "")
-  marc_field_100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_100$X100),str_replace_all(gsub(string,"\\3",marc_field_100$X100),"\\${2}.", "~"),NA)
-}
-marc_field_100 <- marc_field_100 %>%
-  select(id,`$a`,`$d`,`$c`) %>%
-  mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
-  select(id,name) %>%
-  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
-         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
-
-marc_field_100 <- marc_field_100 %>%
-  unique() %>%
-  inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
-  left_join(.,PBL_tworcy,by = c("pbl_id"="TW_TWORCA_ID")) %>%
-  left_join(.,redaktorzy_dzialow,by = c("TW_DZ_DZIAL_ID"="DZ_DZIAL_ID")) %>%
-  select(id,TW_TWORCA_ID=pbl_id,TW_NAZWISKO,TW_IMIE,TW_DZ_DZIAL_ID,DZ_NAZWA=DZ_NAZWA.x,redaktor_dzialu)
-
-podmiotowa_redaktorzy <- podmiotowa_redaktorzy %>%
-  left_join(.,marc_field_100,by="id")
-
-test <- podmiotowa_redaktorzy %>%
-  filter(is.na(TW_TWORCA_ID))
-
-marc_field_100 <- test %>%
-  select(id,X100)%>%
-  filter(X100!="") %>%
-  mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
-  cSplit(.,"X100",sep = "~",direction = "long") %>%
-  filter(X100!="") %>%
-  mutate(X100=str_remove_all(X100,"^\\|")) %>%
-  mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(test$X100,"\\$.")
-subfield_list<- unique(unlist(subfield_list))
-empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
-colnames(empty_table) <-subfield_list
-marc_field_100<-cbind(marc_field_100,empty_table)
-subfield_list_char <- paste("(",subfield_list,")",sep = "")
-subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
-
-x <- 1:length(subfield_list)
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  marc_field_100$X100 <- str_replace(marc_field_100$X100,subfield_list_char[i],"|\\1")
-}
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-  string_a <- "(^)(.*?\\|"
-  string_b <- subfield_list_char2[i]
-  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-  string <- paste(string_a,string_b,string_c,sep = "")
-  marc_field_100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_100$X100),str_replace_all(gsub(string,"\\3",marc_field_100$X100),"\\${2}.", "~"),NA)
-}
-marc_field_100 <- marc_field_100 %>%
-  select(id,`$a`,`$d`,`$c`) %>%
-  mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
-  select(id,name) %>%
-  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
-         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
-
-test <- marc_field_100 %>%
-  select(name) %>%
-  unique()
-###TUTAJ###
-
-
-bn_records_pbl_people_id <- bn_records_pbl_people %>%
-  select(id,osoba_pbl_dzial_id_name) %>%
-  group_by(id) %>%
-  mutate(osoba_pbl_dzial_id_name = paste(unique(osoba_pbl_dzial_id_name),collapse = "~")) %>%
-  ungroup() %>%
-  unique()
-bn_ks <- bn_ks %>%
-  full_join(.,bn_records_pbl_people_id,by = "id")
-
-poprzednie_importy <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008) %>%
-  select(ZA_ZAPIS_ID,X650,X655) %>%
-  left_join(.,dbGetQuery(PBL,"select za_zapis_id, dz.dz_dz_dzial_id, dz.dz_nazwa, rz.rz_rodzaj_id, rz.rz_nazwa, trim(substr(substr(z.za_uwagi,20,length(z.za_uwagi)),INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1,INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),'_')-(INSTR(substr(z.za_uwagi,20,length(z.za_uwagi)),':')+1))) \"pracownik\", z.za_status_imp
-from IBL_OWNER.pbl_zapisy z
-join IBL_OWNER.pbl_dzialy dz on dz.dz_dzial_id=z.za_dz_dzial1_id
-join IBL_OWNER.pbl_rodzaje_zapisow rz on rz.rz_rodzaj_id=z.za_rz_rodzaj1_id
-where z.za_uwagi like '%import%'"), by = "ZA_ZAPIS_ID") %>%
-  mutate(pracownik = str_remove(pracownik,"x$")) %>%
-  mutate(X650 = str_replace_all(X650,"(?<!7)(\\$a)","\\\\7\\1"),
-         X655 = str_replace_all(X655,"(?<!7)(\\$a)","\\\\7\\1"),
-         X650 = ifelse(is.na(X650),NA,
-                       ifelse(!str_detect(X650,"\\$2DBN"),str_replace_all(X650,"(\\||$)","$2DBN\\1"),as.character(X650))),
-         X655 = ifelse(is.na(X655),NA,
-                       ifelse(!str_detect(X655,"\\$2DBN"),str_replace_all(X655,"(\\||$)","$2DBN\\1"),as.character(X655)))) %>%
-  filter(ZA_STATUS_IMP=="IOK")
-
-count <- as.data.frame(table(poprzednie_importy$pracownik))
-
-```
-
-
-
 
 ```{r wczytanie podzielonych i przygotowanych paczek BN}
 podmiotowe <- read.csv2("C:/Users/Cezary/Desktop/podmiotowe.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
@@ -2234,6 +1974,9 @@ write.csv2(test, "C:/Users/cezar/Documents/PBL/Import danych z zewn?trz/Bibliote
 ```
 
 ```{r ksi??ki podmiotowe}
+#całość zrobić w jednym chunku na ifach najlepiej
+
+
 #literatura podmiotowa z UKD literackim
 data <- podmiotowe %>%
   filter(X655!="\\7$aKomiks$2DBN") #usuwam komiks
