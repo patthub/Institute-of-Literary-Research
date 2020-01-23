@@ -2567,80 +2567,90 @@ marc_field_300 <- marc_field_300 %>%
          `$a` = ifelse(is.na(`$a`),"",as.character(`$a`)),
          `$b` = ifelse(is.na(`$b`),"",as.character(`$b`)))
 #pole 500 do opisu fizycznego
-#tutaj!!!!!!!!!
-
-
-
-         
-
-
-
-
-
-
-
-
-marc_field500 <- data %>%
-  select(licznik,X500)
-marc_field500$X500<-str_remove_all(marc_field500$X500,"^\\|")
-marc_field500 <- mutate(marc_field500,
-               indicator = str_replace_all(marc_field500$X500,"(^.*?)(\\$.*)","\\1"))
+marc_field_500 <- data %>%
+  select(ZA_UWAGI,X500)%>%
+  filter(X500!="") %>%
+  mutate(X500=str_replace_all(X500,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X500",sep = "~",direction = "long") %>%
+  filter(X500!="") %>%
+  mutate(X500=str_remove_all(X500,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X500,"(^.*?)(\\$.*)","\\1"))
 subfield_list<- str_extract_all(data$X500,"\\$.")
 subfield_list<- unique(unlist(subfield_list))
-empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field500)[1]))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_500)[1]))
 colnames(empty_table) <-subfield_list
-
-marc_field500<-cbind(marc_field500,empty_table)
-
+marc_field_500<-cbind(marc_field_500,empty_table)
 subfield_list_char <- paste("(",subfield_list,")",sep = "")
 subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
 
 x <- 1:length(subfield_list)
-
 for (i in x) {
-  marc_field500$X500 <- str_replace(marc_field500$X500,subfield_list_char[i],"|\\1")
   progress(match(i,x), max.value = length(x)) 
+  marc_field_500$X500 <- str_replace(marc_field_500$X500,subfield_list_char[i],"|\\1")
 }
 for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
   subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-string_a <- "(^)(.*?\\|"
-string_b <- subfield_list_char2[i]
-string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-string <- paste(string_a,string_b,string_c,sep = "")
-marc_field500[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field500$X500),str_replace_all(gsub(string,"\\3",marc_field500$X500),"\\${2}.", "~"),NA)
-progress(match(i,x), max.value = length(x))  
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_500[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_500$X500),str_replace_all(gsub(string,"\\3",marc_field_500$X500),"\\${2}.", "~"),NA)
 }
-
-marc_field546 <- data %>%
-  select(licznik,X546)
-marc_field546$X546<-str_remove_all(marc_field546$X546,"^\\|")
-marc_field546 <- mutate(marc_field546,
-               indicator = str_replace_all(marc_field546$X546,"(^.*?)(\\$.*)","\\1"))
+marc_field_500 <- marc_field_500 %>%
+  filter(!grepl("oryg(\\.|\\,)",X500)&grepl("pseud|nazwa",X500)) %>%
+  mutate(`$a` = str_remove(`$a`," \\;+$| \\:+$"))
+  
+#pole 546 do opisu fizycznego
+marc_field_546 <- data %>%
+  select(ZA_UWAGI,X546)%>%
+  filter(X546!="") %>%
+  mutate(X546=str_replace_all(X546,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X546",sep = "~",direction = "long") %>%
+  filter(X546!="") %>%
+  mutate(X546=str_remove_all(X546,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X546,"(^.*?)(\\$.*)","\\1"))
 subfield_list<- str_extract_all(data$X546,"\\$.")
 subfield_list<- unique(unlist(subfield_list))
-empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field546)[1]))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_546)[1]))
 colnames(empty_table) <-subfield_list
-
-marc_field546<-cbind(marc_field546,empty_table)
-
+marc_field_546<-cbind(marc_field_546,empty_table)
 subfield_list_char <- paste("(",subfield_list,")",sep = "")
 subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
 
 x <- 1:length(subfield_list)
-
 for (i in x) {
-  marc_field546$X546 <- str_replace(marc_field546$X546,subfield_list_char[i],"|\\1")
   progress(match(i,x), max.value = length(x)) 
+  marc_field_546$X546 <- str_replace(marc_field_546$X546,subfield_list_char[i],"|\\1")
 }
 for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
   subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-string_a <- "(^)(.*?\\|"
-string_b <- subfield_list_char2[i]
-string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-string <- paste(string_a,string_b,string_c,sep = "")
-marc_field546[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field546$X546),str_replace_all(gsub(string,"\\3",marc_field546$X546),"\\${2}.", "~"),NA)
-progress(match(i,x), max.value = length(x))  
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_546[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_546$X546),str_replace_all(gsub(string,"\\3",marc_field_546$X546),"\\${2}.", "~"),NA)
 }
+marc_field_546 <- marc_field_546 %>%
+  mutate(`$a` = str_remove(`$a`," \\;+$| \\:+$"))
+
+za_opis_ks <- data %>%
+  select(ZA_UWAGI) %>%
+  left_join(.,BN_wydawnictwo %>% select(ZA_UWAGI,do_opisu),by="ZA_UWAGI") %>%
+  left_join(.,marc_field_300 %>% select(ZA_UWAGI,X300a=`$a`,X300b=`$b`),by="ZA_UWAGI") %>%
+  left_join(.,marc_field_500 %>% select(ZA_UWAGI,X500a=`$a`),by="ZA_UWAGI") %>%
+  left_join(.,marc_field_546 %>% select(ZA_UWAGI,X546a=`$a`),by="ZA_UWAGI")
+za_opis_ks[is.na(za_opis_ks)]  <- ""
+za_opis_ks <- za_opis_ks %>%
+  mutate(za_opis_ks = paste(ifelse(do_opisu!="",paste(as.character(do_opisu),", ",sep = ""),""),ifelse(X300a!="",paste(as.character(X300a),", ",sep = ""),""),ifelse(X300b!="",paste(as.character(X300b),", ",sep = ""),""),ifelse(X500a!="",paste(as.character(X500a),", ",sep = ""),""),ifelse(X546a!="",as.character(X546a),""),sep = ""),
+         za_opis_ks = str_remove(za_opis_ks,"(, )+$"))
+
+
+`$a` = paste(ifelse(is.na(`$a`),"",as.character(`$a`)),collapse = " ")
+
+
+
 marc_field500$`$a` <- str_remove(marc_field500$`$a`," \\;+$| \\:+$")
 marc_field546$`$a` <- str_remove(marc_field546$`$a`," \\;+$| \\:+$")
 marc_field500$`$a`[is.na(marc_field500$`$a`)] <- ""
