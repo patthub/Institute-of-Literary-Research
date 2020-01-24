@@ -515,7 +515,8 @@ bn_ok <- bn_ok %>%
                                                       ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
                                                              ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN")&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
                                                                     ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))),
-         rodzaj_ksiazki = ifelse(rodzaj_ksiazki=="","przedmiotowa",as.character(rodzaj_ksiazki))) %>%
+         rodzaj_ksiazki = ifelse(rodzaj_ksiazki=="","przedmiotowa",as.character(rodzaj_ksiazki)),
+         rodzaj_ksiazki = ifelse(grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X490)|grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X830),"przedmiotowa",as.character(rodzaj_ksiazki))) %>%
   select(1:29,rodzaj_ksiazki)
 ```
 
@@ -885,10 +886,6 @@ BN_PBL_lista_literatur <- sheets_read(ss = "1zbwjnrtWGvbjrQTLMavJcWSu7HfP0I-USNg
 PBL_hasla_osobowe <- sheets_read(ss = "1zbwjnrtWGvbjrQTLMavJcWSu7HfP0I-USNgZ_KWiXjc", sheet = "pbl_hasla_osobowe") %>%
   select(2:5)
 colnames(PBL_hasla_osobowe) <- c("DZ_DZIAL_ID","DZ_NAZWA","redaktor_dzialu","nazwa")
-```
-
-```{r wczytanie gotowego przetworzonego pliku BN}
-bn_ok <- read.csv2("C:/Users/Cezary/Downloads/bn_ok_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE)
 ```
 
 ```{r przypisanie redaktorów do przedmiotowej i podmiotowej}
@@ -2738,7 +2735,8 @@ BN_autor <- data %>%
 BN_wspoltworca <- data %>%
   select(ZA_UWAGI) %>%
   left_join(.,BN_wspoltworca %>% select(ZA_UWAGI,OS_OSOBA_ID,OS_NAZWISKO,OS_IMIE,fo_symbol),by="ZA_UWAGI") %>%
-  ddply(., .(ZA_UWAGI), summarize, OS_OSOBA_ID = paste(OS_OSOBA_ID, collapse="|"), OS_NAZWISKO = paste(OS_NAZWISKO, collapse="|"), OS_IMIE = paste(OS_IMIE, collapse="|"), fo_symbol = paste(fo_symbol, collapse="|"))
+  ddply(., .(ZA_UWAGI), summarize, OS_OSOBA_ID = paste(OS_OSOBA_ID, collapse="|"), OS_NAZWISKO = paste(OS_NAZWISKO, collapse="|"), OS_IMIE = paste(OS_IMIE, collapse="|"), fo_symbol = paste(fo_symbol, collapse="|")) %>%
+  mutate(fo_symbol = ifelse(fo_symbol=="NULL","NA",as.character(fo_symbol)))
 BN_wydawnictwo <- data %>%
   select(ZA_UWAGI) %>%
   left_join(.,BN_wydawnictwo %>% select(ZA_UWAGI,WY_WYDAWNICTWO_ID,WY_NAZWA,WY_MIASTO,za_rok_wydania),by="ZA_UWAGI") %>%
