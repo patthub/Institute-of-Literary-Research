@@ -276,6 +276,7 @@ for (i in x) {
 
 
 #5 Konwersja danych do formatu MARC21
+trim <- function (x) gsub("^\\s+|\\s+$", "", x)
 pbl_hp <- read.csv2("C:/Users/Cezary/Desktop/pbl_subject_headings.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 
 pbl_articles <- read.csv2("C:/Users/Cezary/Downloads/pbl_articles.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
@@ -514,13 +515,6 @@ X964 <- pbl_articles %>%
   mutate(X964 = paste("\\\\$a",dzial,sep = "")) %>%
   mutate(X964 = trim(str_replace(X964,"(.*)( - .$)","\\1"))) %>%
   select(rekord_id,X964)
-#XLKR
-XLKR <- dbGetQuery(PBL,
-                   "select z.za_zapis_id \"rekord_id\", z.za_za_zapis_id \"XLKR\"
-                    from pbl_zapisy z
-                    where z.za_type in ('PU','IZA')") %>%
-  mutate(XLKR = ifelse(!is.na(XLKR),paste("pl",sprintf("%09d", XLKR),sep = ""),"")) %>%
-  arrange(rekord_id)
 
 pbl_marc_articles <- X005 %>%
   full_join(.,X008,by = "rekord_id") %>%
@@ -539,7 +533,6 @@ pbl_marc_articles <- X005 %>%
   full_join(.,X773,by = "rekord_id") %>%
   full_join(.,X787,by = "rekord_id") %>%
   full_join(.,X964,by = "rekord_id") %>%
-  full_join(.,XLKR,by = "rekord_id") %>%
   cbind(.,LDR,X040,X001) %>%
   select(noquote(order(colnames(.))))
 
@@ -560,7 +553,6 @@ long <- reshape(pbl_marc_articles,
   mutate(fields = ifelse(lead(fields=="=LDR"),paste(fields,"||",sep = ""),as.character(fields))) %>%
   mutate(Value = ifelse(lead(fields=="=LDR"),paste(Value,"||",sep = ""),as.character(Value))) %>%
   cSplit(.,c("fields","Value"),sep = "|",direction = "long")
-
 
 ```
 
