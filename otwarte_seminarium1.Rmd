@@ -1,0 +1,566 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+#biblioteki
+options(java.parameters = "-Xmx32000m")
+options(scipen = 999)
+pacman::p_load(utf8,googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,arrangements,tokenizers,RSelenium,jsonlite)
+
+#połączenie z bazą PBL
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+```
+
+
+```{r}
+#1 - wczytywanie tabel w R
+bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8", header = TRUE, stringsAsFactors = FALSE) %>%
+  filter(!grepl("\\\\$aArtykuły|\\\\$Druki ulotne",X380)) %>%
+  filter(!grepl("\\$aNadbitki i odbitki",X655)) %>%
+  filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="") %>%
+  filter(grepl("\\$aWA|\\$aW ",X040)) %>%
+  filter(X655!="\\7$aKomiks$2DBN") %>%
+  mutate(licznik = 1:lengths(.))
+
+
+
+
+
+
+
+
+
+
+
+
+
+#2 - Wyrażenia regularne w pracy bibliograficznej - wydobycie imienia i nazwiska autora książki
+marc_field_100 <- bn_ks %>%
+  select(licznik,X100)%>%
+  filter(X100!="") %>%
+  mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X100",sep = "~",direction = "long") %>%
+  filter(X100!="") %>%
+  mutate(X100=str_remove_all(X100,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(bn_ks$X100,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_100<-cbind(marc_field_100,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_100$X100 <- str_replace(marc_field_100$X100,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_100$X100),str_replace_all(gsub(string,"\\3",marc_field_100$X100),"\\${2}.", "~"),NA)
+}
+marc_field_100 <- marc_field_100 %>%
+  select(licznik,`$a`,`$b`) %>%
+  unique() %>%
+  mutate(`$a` = ifelse(!is.na(`$b`),paste(`$a`,`$b`,sep = " "),as.character(`$a`))) %>%
+  mutate(`$a` = str_remove(`$a`,"(?<=[a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)")) %>%
+  unique() %>%
+  mutate(NAZWISKO = ifelse(grepl("\\|",`$a`), str_replace_all(str_remove_all(`$a`,","),"\\|",", "),
+                              ifelse(grepl(",",`$a`),str_replace_all(`$a`,"(.*?)(, )(.*)","\\1"),as.character(`$a`))),
+         IMIE = ifelse(grepl("\\|",`$a`),"*",
+                          ifelse(grepl(",",`$a`),str_replace_all(`$a`,"(.*?)(, )(.*)","\\3"),"*"))) %>%
+  select(licznik,NAZWISKO,IMIE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#3 - Web scraping w pracy bibliograficznej - zbudowanie lokalnej bazy danych z zasobu strony internetowej
+#empty table
+table_data <- data.frame(data_person = character(), role = character(), data_person2 = character(), description = character(), stringsAsFactors=FALSE)
+#browser
+#list_versions("chromedriver")
+rD <- rsDriver(port=4444L,browser="chrome", chromever="78.0.3904.11")
+remDr <- rD$client
+url <- "http://ceny.ucl.cas.cz/index.php"
+#rD$server$stop()
+#rm(rD)
+#gc()
+#iteracje
+
+x <- seq(4,7500, by=2)
+
+for (i in x) {
+  progress(match(i,x), max.value = length(x))  
+  remDr$navigate(url)
+  webElem1 <- remDr$findElement("css selector", "#sbox")
+  webElem1$sendKeysToElement(list('*', key = 'enter'))
+  
+  selector_left <- "div:nth-child(2) div:nth-child(2) div:nth-child(2) div:nth-child(2) > a:nth-child("
+  selector_mid <- i
+  selector_right <- ")"
+  selector <- paste(selector_left,selector_mid,selector_right, sep = "")
+  
+  webElem2 <- remDr$findElement(using = 'css selector', selector)
+  data_person <- webElem2$getElementText()
+  data_person <- as.character(data_person)
+  webElem2$clickElement()
+  tryCatch({
+  role <- remDr$findElement(using = 'css selector', 'h3')
+  role <- role$getElementText()
+  role <- as.character(role)
+  }, error=function(e){
+                      role <<- "Brak danych (CR)"
+  })
+  data_person2 <- remDr$findElement(using = 'css selector', 'h2')
+  data_person2 <- data_person2$getElementText()
+  data_person2 <- as.character(data_person2)
+  description <- remDr$findElement(using = 'css selector', '.indent')
+  description <- description$getElementText()
+  description <- as.character(description)
+  
+  iteration <- cbind(data_person,role,data_person2,description)
+  
+  table_data <- rbind(table_data,iteration)
+}
+#uporządkowanie danych
+table_data <- mutate(table_data,
+                     person_year = ifelse(grepl("\\d{4}", table_data$data_person2), as.character(str_replace_all(table_data$data_person2, "(.*)(, )(\\d.*)", "\\3")
+),NA))
+
+table_data <- mutate(table_data,
+                     single_prize = str_replace_all(table_data$description, "(\\n)(\\d{4} [A-ZAÁÀÂÃÄĂĀÅĄÆEÉÈÊËĚĒĖĘIÍÌÎÏĪĮIOÓÒÔÕÖŐØŒUÚÙÛÜŰŪůYÝCĆČçDĎĐĐGĢĞKĶLŁĻNŃÑŇŅŊRŘSŚŠŞSßTŤŦÞŢ8ZŻŹŽ])", "|\\2"))
+
+table_data <- cSplit(table_data, "single_prize", sep = "|", direction = "long")
+
+table_data$single_prize <- str_replace_all(table_data$single_prize,"\\n", "|")
+
+table_data <- mutate(table_data,
+                     prize_year = str_replace_all(table_data$single_prize, "(^\\d{4})(.*)", "\\1"),
+                     book_title__reason = ifelse(grepl("\\|",table_data$single_prize),as.character(str_replace_all(table_data$single_prize, "(^\\d{4} )(.*)(\\|)(.*)", "\\4")),NA),
+                     rest = ifelse(grepl("\\|",table_data$single_prize),as.character(str_replace_all(table_data$single_prize, "(^\\d{4} )(.*)(\\|)(.*)", "\\2")),as.character(str_replace_all(table_data$single_prize, "(^\\d{4} )(.*)($)", "\\2"))))
+
+
+table_data <- mutate(table_data,
+                     prize_name = ifelse(grepl("\\,",table_data$rest), as.character(str_replace_all(table_data$rest, "(.*?)(, )(.*)", "\\1")),as.character(table_data$rest)),
+                     prize_category__place = ifelse(grepl("\\,",table_data$rest), as.character(str_replace_all(table_data$rest, "(.*?)(, )(.*)", "\\3")),NA))
+table_data <- table_data %>%
+  select(data_person,person_year,prize_name,prize_year,prize_category__place,book_title__reason)
+colnames(table_data) <- c("person","person_year","prize_name","prize_year","prize_category__place","book_title__reason")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#4 - Rekoncyliacja haseł osobowych - PBL-BN-VIAF
+pbl_tworcy <- dbGetQuery(PBL,
+                            "select *
+                            from pbl_tworcy tw") %>%
+  select(TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE) %>%
+  arrange(TW_TWORCA_ID)
+#korzystanie z API
+#tworzenie pustej tabeli
+wzorcowe_bn <- data.frame(TW_TWORCA_ID = as.integer(),TW_NAZWISKO = as.character(), TW_IMIE = as.character(), bn_id = as.character(), bn_name = as.character(), skad = as.character(), stringsAsFactors=FALSE)
+page <- "https://viaf.org/"
+x <- 1:length(pbl_tworcy$TW_TWORCA_ID)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  url_1 <- "http://data.bn.org.pl/api/authorities.json?limit=100&name="
+  url_2 <- tolower(str_replace_all(pbl_tworcy$TW_NAZWISKO," ", "+"))[i]
+  url_3 <- "+"
+  url_4 <- tolower(str_replace_all(pbl_tworcy$TW_IMIE," ","+"))[i]
+  url <- as.character(paste(url_1,url_2,url_3,url_4,sep = ""))
+  tryCatch({
+    bn <- jsonlite::fromJSON(url) %>% .$authorities %>%
+    filter(title=="") %>%
+      select(bn_id=id,bn_name=name)
+  if (length(bn$bn_id)>0) {
+    bn <- jsonlite::fromJSON(url) %>% .$authorities %>%
+    filter(title=="") %>%
+    select(bn_id=id,bn_name=name) %>%
+      mutate(skad = "BN")
+  } else {
+  remDr$navigate(page)
+    lista_wyboru <- remDr$findElement(using = 'css selector', "div.yui-skin-sam form:nth-child(1) fieldset:nth-child(1) select:nth-child(2) > option:nth-child(5)")
+      lista_wyboru$clickElement()
+      sbox <- remDr$findElement(using = 'css selector', "#searchTerms")
+      sbox$sendKeysToElement(list(paste(pbl_tworcy$TW_NAZWISKO[i],pbl_tworcy$TW_IMIE[i],sep = " ")))
+      enter <- remDr$findElement(using = 'css selector', "#btnSearch2")
+      enter$clickElement()
+      result_page <- remDr$findElement(using = 'css selector', 'div.inner table:nth-child(2) tbody:nth-child(1) tr:nth-child(2) td.recName > a:nth-child(1)')
+      result_page$clickElement()
+      viaf_number <- str_replace(as.character(remDr$getCurrentUrl()),"(.*?)(\\d+)(\\/#.*$)","\\2")
+      url <- paste("https://data.bn.org.pl/api/authorities.json?limit=100&marc=024a+",viaf_number,sep = "")
+      bn <- jsonlite::fromJSON(url) %>% .$authorities %>%
+      filter(title=="") %>%
+      select(bn_id=id,bn_name=name) %>%
+        mutate(skad = "VIAF")
+  }
+  }, error=function(e){
+    tryCatch({
+      remDr$navigate(page)
+      lista_wyboru <- remDr$findElement(using = 'css selector', "div.yui-skin-sam form:nth-child(1) fieldset:nth-child(1) select:nth-child(2) > option:nth-child(5)")
+      lista_wyboru$clickElement()
+      sbox <- remDr$findElement(using = 'css selector', "#searchTerms")
+      sbox$sendKeysToElement(list(paste(pbl_tworcy$TW_NAZWISKO[i],pbl_tworcy$TW_IMIE[i],sep = " ")))
+      enter <- remDr$findElement(using = 'css selector', "#btnSearch2")
+      enter$clickElement()
+      result_page <- remDr$findElement(using = 'css selector', 'div.inner table:nth-child(2) tbody:nth-child(1) tr:nth-child(2) td.recName > a:nth-child(1)')
+      result_page$clickElement()
+      viaf_number <- str_replace(as.character(remDr$getCurrentUrl()),"(.*?)(\\d+)(\\/#.*$)","\\2")
+      url <- paste("https://data.bn.org.pl/api/authorities.json?limit=100&marc=024a+",viaf_number,sep = "")
+      bn <<- jsonlite::fromJSON(url) %>% .$authorities %>%
+      filter(title=="") %>%
+      select(bn_id=id,bn_name=name) %>%
+        mutate(skad = "VIAF") %>%
+        mutate(bn_id = as.character(bn_id))
+    }, error=function(f){
+                        bn <<- data.frame(bn_id = "brak danych (CR)", bn_name = "brak danych (CR)", skad = "brak danych (CR)")
+    })
+    })
+
+  iteration <- cbind(pbl_tworcy %>% slice(i), bn)
+  wzorcowe_bn <- rbind(wzorcowe_bn,iteration)
+}
+#dopisywanie VIAF
+pbl_viaf <- data.frame(stringsAsFactors=FALSE)
+x <- 1:length(wzorcowe_bn$TW_TWORCA_ID)
+i <- 1
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  tryCatch({
+  name <- paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",wzorcowe_bn$bn_id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",wzorcowe_bn$bn_id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\.+)"," \\2"),sep = "|")
+  viaf <- str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",wzorcowe_bn$bn_id[i],sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields),collapse = "|"),"(\\|NA)|(\\|viaf)")
+  }, error=function(e){
+                     name <<- "brak danych (CR)"
+                     viaf <<- "brak danych (CR)"
+  })
+  iteration <- cbind(wzorcowe_bn %>% slice(i) %>% select(1:4), name, viaf)
+  pbl_viaf <- rbind(pbl_viaf,iteration)
+}
+
+
+
+
+
+
+
+#5 Konwersja danych do formatu MARC21
+pbl_hp <- read.csv2("C:/Users/Cezary/Desktop/pbl_subject_headings.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+
+pbl_articles <- read.csv2("C:/Users/Cezary/Downloads/pbl_articles.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+pbl_articles <- pbl_articles %>%
+  slice(1:2000)
+
+#empty data.frame
+pbl_marc <- data.frame(LDR = character(), X001 = character(), X590 = character(), X964 = character(), X100 = character(), X600 = character(), X245 = character(), X700 = character(), X520 = character(), X240 = character(), X710 = character(), X610 = character(), X630 = character(), X787 = character(), X650 = character(), X651 = character(), X655 = character(),  X611 = character(), X773 = character(), LKR = character(), stringsAsFactors=FALSE) %>%
+  select(noquote(order(colnames(.))))
+
+#LDR
+LDR <- "-----nab---------4u-----"
+#X001
+X001 <- pbl_articles %>%
+  select(X001 = rekord_id) %>%
+  unique() %>%
+  mutate(X001 = paste("pl",sprintf("%09d", X001),sep = ""))
+
+#X005
+X005 <- pbl_articles %>%
+  select(rekord_id,ZA_UZYTK_MOD_DATA) %>%
+  unique() %>%
+  rename(X005 = ZA_UZYTK_MOD_DATA) %>%
+  mutate(X005 = trim(str_replace(X005,"(\\d{4})(-)(\\d{2})(-)(\\d{2})(.*$)","\\1\\3\\5")))
+
+#X008
+X008 <- pbl_articles %>%
+  select(rekord_id,ZA_UZYTK_WPIS_DATA,rok) %>%
+  unique() %>%
+  rename(X008 = ZA_UZYTK_WPIS_DATA) %>%
+  mutate(X008 = ifelse(is.na(rok),paste(str_replace(X008,"(\\d{2})(\\d{2})(-)(\\d{2})(-)(\\d{2})(.*$)","\\2\\4\\6"),"q199-----                    -d",sep = ""),paste(str_replace(X008,"(\\d{2})(\\d{2})(-)(\\d{2})(-)(\\d{2})(.*$)","\\2\\4\\6"),"s",as.character(rok),"----                    -d",sep = ""))) %>%
+  select(rekord_id,X008)
+
+#X040
+X040 <- "\\\\$aIBL$bpol"
+
+#X100
+X100 <- pbl_articles %>%
+  select(rekord_id,rodzaj_zapisu,tworca_nazwisko,tworca_imie,autor_nazwisko,autor_imie) %>%
+  unique() %>%
+  mutate(tworca_nazwisko = ifelse(rodzaj_zapisu=="książka twórcy (podmiotowa)"&!is.na(tworca_nazwisko)&grepl(",",tworca_nazwisko)&tworca_imie=="*",as.character(autor_nazwisko),as.character(tworca_nazwisko)),
+         tworca_imie = ifelse(rodzaj_zapisu=="książka twórcy (podmiotowa)"&!is.na(tworca_nazwisko)&tworca_nazwisko==autor_nazwisko&tworca_imie=="*",as.character(autor_imie),as.character(tworca_imie)),
+         X100 = ifelse(is.na(tworca_nazwisko),NA,
+                       ifelse(rodzaj_zapisu=="książka twórcy (podmiotowa)",paste("1\\$a",tworca_nazwisko,", ",tworca_imie,"$4aut",sep = ""),
+                              ifelse(!is.na(autor_nazwisko),paste("1 $a",autor_nazwisko,", ",autor_imie,"$4aut",sep = ""),NA)))) %>%
+  select(rekord_id,X100) %>%
+  group_by(rekord_id) %>%
+  mutate(X100 = paste(X100,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  mutate(X700 = ifelse(grepl("\\|",X100),str_replace(X100,"^(.*?)(\\|)(.*$)","\\3"),NA),
+         X100 = ifelse(grepl("\\|",X100),str_replace(X100,"^(.*?)(\\|)(.*$)","\\1"),as.character(X100)),
+         X100 = trim(ifelse(X100=="NA",NA,as.character(X100))),
+         X700 = trim(ifelse(X700==X100,NA,as.character(X700))))
+#X240
+X240 <- pbl_articles %>%
+  select(rekord_id,ZA_TYTUL_ORYGINALU) %>%
+  unique() %>%
+  rename(X240 = ZA_TYTUL_ORYGINALU) %>%
+  mutate(X240 = trim(ifelse(is.na(X240),"",paste("\\\\$a",str_replace(X240,"^(.*?\\])(.*$)","\\1"),sep = ""))))
+
+#X245
+X245 <- pbl_articles %>%
+  select(rekord_id,autor_nazwisko,autor_imie,tytul,wspoltworcy) %>%
+  unique() %>%
+  mutate(tytul_ok = ifelse(is.na(tytul),"",paste("10$a",tytul," /",sep = "")),
+         autor = ifelse(!is.na(autor_nazwisko)&!is.na(autor_imie),paste("$c",autor_imie," ",autor_nazwisko,sep = ""),
+                        ifelse(!is.na(autor_nazwisko)&is.na(autor_imie),paste("$c",autor_nazwisko,sep = ""),"")),
+         wspoltworcy = ifelse(is.na(wspoltworcy),"",as.character(wspoltworcy))) %>%
+  select(rekord_id,tytul_ok,autor,wspoltworcy) %>%
+  group_by(rekord_id) %>%
+  mutate(tytul_ok = paste(unique(tytul_ok),collapse = "|"),
+         autor = str_replace_all(paste(unique(autor),collapse = "|"),"\\|\\$c",", "),
+         wspoltworcy = paste(unique(wspoltworcy),collapse = "|")) %>%
+  ungroup() %>%
+  mutate(X245 = paste(tytul_ok,autor," ; ",wspoltworcy,".", sep = ""),
+         X245 = trim(str_replace_all(X245,"( ;  ; )(\\.)|( ;   ; )(\\.)|( ; )(\\.)|","\\2"))) %>%
+  select(rekord_id,X245) %>%
+  unique()
+
+#X520
+X520 <- pbl_articles %>%
+  select(rekord_id,adnotacja) %>%
+  unique() %>%
+  rename(X520 = adnotacja) %>%
+  mutate(X520 = trim(ifelse(is.na(X520),"",paste("2\\$a",X520,sep = ""))))
+
+#X600
+X600 <- pbl_articles %>%
+  select(rekord_id,ZA_TYPE,tworca_nazwisko,tworca_imie) %>%
+  unique() %>%
+  filter(ZA_TYPE=="IZA") %>%
+  mutate(tworca_nazwisko = ifelse(is.na(tworca_nazwisko),"",
+                                  ifelse(!is.na(tworca_nazwisko)&grepl(",",tworca_nazwisko)&tworca_imie=="*",str_replace_all(tworca_nazwisko,",","|"),as.character(tworca_nazwisko))),
+         tworca_imie = ifelse(is.na(tworca_imie),"",
+                              ifelse(!is.na(tworca_nazwisko)&tworca_imie=="*","",as.character(tworca_imie)))) %>%
+  cSplit(.,"tworca_nazwisko",sep = "|",direction = "long") %>%
+  mutate(X600 = trim(ifelse(tworca_imie!="",paste("14$a",tworca_nazwisko,", ",tworca_imie,sep = ""),paste("14$a",tworca_nazwisko,sep = "")))) %>%
+  select(rekord_id,X600) %>%
+  group_by(rekord_id) %>%
+  mutate(X600 = paste(X600,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  mutate(X600 = str_remove(X600," \\*$|\\*$")) %>%
+  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+  
+#X610
+X610 <- pbl_articles %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="24.61"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X610 = trim(ifelse(!is.na(KH_NAZWA),paste("24$a",HP_NAZWA,", ",KH_NAZWA,sep = ""),paste("24$a",HP_NAZWA,sep = "")))) %>%
+  select(rekord_id,X610) %>%
+  group_by(rekord_id) %>%
+  mutate(X610 = paste(X610,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X611
+X611 <- pbl_articles %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="24.611"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X611 = trim(ifelse(!is.na(KH_NAZWA),paste("24$a",HP_NAZWA,", ",KH_NAZWA,sep = ""),paste("24$a",HP_NAZWA,sep = "")))) %>%
+  select(rekord_id,X611) %>%
+  group_by(rekord_id) %>%
+  mutate(X611 = paste(X611,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X630
+X630 <- pbl_articles %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="4.63"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X630 = trim(ifelse(!is.na(KH_NAZWA),paste("\\4$a",HP_NAZWA,", ",KH_NAZWA,sep = ""),paste("\\4$a",HP_NAZWA,sep = "")))) %>%
+  select(rekord_id,X630) %>%
+  group_by(rekord_id) %>%
+  mutate(X630 = paste(X630,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X650
+X650 <- pbl_articles %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="4.65"|MARC_FIELD=="24.65"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X650 = trim(ifelse(MARC_FIELD=="4.65",
+                            ifelse(!is.na(KH_NAZWA),paste("04$a",HP_NAZWA,", ",KH_NAZWA,sep = ""),paste("04$a",HP_NAZWA,sep = "")),
+                       ifelse(MARC_FIELD=="24.65",
+                              ifelse(!is.na(KH_NAZWA),paste("24$a",HP_NAZWA,", ",KH_NAZWA,sep = ""),paste("24$a",HP_NAZWA,sep = "")),"")))) %>%
+  select(rekord_id,X650) %>%
+  group_by(rekord_id) %>%
+  mutate(X650 = paste(X650,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X651
+X651 <- pbl_articles %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="4.651"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X651 = trim(ifelse(!is.na(KH_NAZWA),paste("\\4$a",HP_NAZWA,", ",KH_NAZWA,sep = ""),paste("\\4$a",HP_NAZWA,sep = "")))) %>%
+  select(rekord_id,X651) %>%
+  group_by(rekord_id) %>%
+  mutate(X651 = paste(X651,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  mutate(X651 = ifelse(is.na(X651),"\\4$aPBL",paste("\\4$aPBL|",X651,sep = ""))) %>%
+  arrange(rekord_id)
+
+#X655
+X655 <- pbl_articles %>%
+  select(rekord_id,rodzaj_zapisu) %>%
+  unique() %>%
+  rename(X655 = rodzaj_zapisu) %>%
+  mutate(X655 = trim(paste("\\4$a",X655,sep = "")))
+  
+#X700
+X700 <- pbl_articles %>%
+  select(rekord_id,funkcja_osoby,wspoltworca_nazwisko,wspoltworca_imie) %>%
+  unique() %>%
+  mutate(X700 = trim(ifelse(is.na(wspoltworca_nazwisko),"",paste("1\\$a",wspoltworca_nazwisko,", ",wspoltworca_imie,"$e",funkcja_osoby,sep = "")))) %>%
+  select(rekord_id,X700) %>%
+  rbind(X100 %>% select(rekord_id,X700) %>% cSplit(.,"X700",sep = "|",direction = "long"),.) %>%
+  arrange(rekord_id) %>%
+  filter(!is.na(X700)&X700!="") %>%
+  group_by(rekord_id) %>%
+  mutate(X700 = paste(X700,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+X100 <- X100 %>%
+  select(rekord_id,X100)
+  
+#773
+X773 <- pbl_articles %>%
+  select(rekord_id,czasopismo,rok,numer,strony) %>%
+  unique() %>%
+  mutate(X773 = ifelse(is.na(rok)&is.na(numer)&is.na(strony),paste("0\\$t",czasopismo,sep = ""),
+                       ifelse(is.na(numer)&is.na(strony),paste("0\\$t",czasopismo,"$gR. ",rok,"$9",rok,sep = ""),
+                              ifelse(is.na(strony),paste("0\\$t",czasopismo,"$gR. ",rok,", ",numer,"$9",rok,sep = ""),
+                                     ifelse(is.na(numer),paste("0\\$t",czasopismo,"$gR. ",rok,", ",strony,"$9",rok,sep = ""),paste("0\\$t",czasopismo,"$gR. ",rok,", ",numer,", ",strony,"$9",rok,sep = ""))))),
+         X773 = ifelse(nchar(X773)==6,"",as.character(X773))) %>%
+  select(rekord_id,X773)
+
+#X787
+X787 <- pbl_articles %>%
+  select(rekord_id,HP_NAZWA,KH_NAZWA) %>%
+  unique() %>% 
+  inner_join(.,pbl_hp %>% filter(MARC_FIELD=="787"),by = c("HP_NAZWA","KH_NAZWA")) %>%
+  mutate(X787 = trim(ifelse(!is.na(KH_NAZWA),paste(HP_NAZWA,", ",KH_NAZWA,sep = ""),as.character(HP_NAZWA)))) %>%
+  select(rekord_id,X787) %>%
+  group_by(rekord_id) %>%
+  mutate(X787 = paste(X787,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  full_join(.,pbl_articles %>% select(rekord_id) %>% unique(),by = "rekord_id") %>%
+  arrange(rekord_id)
+
+#X964
+X964 <- pbl_articles %>%
+  select(rekord_id,dzial) %>%
+  unique() %>%
+  mutate(X964 = paste("\\\\$a",dzial,sep = "")) %>%
+  mutate(X964 = trim(str_replace(X964,"(.*)( - .$)","\\1"))) %>%
+  select(rekord_id,X964)
+#XLKR
+XLKR <- dbGetQuery(PBL,
+                   "select z.za_zapis_id \"rekord_id\", z.za_za_zapis_id \"XLKR\"
+                    from pbl_zapisy z
+                    where z.za_type in ('PU','IZA')") %>%
+  mutate(XLKR = ifelse(!is.na(XLKR),paste("pl",sprintf("%09d", XLKR),sep = ""),"")) %>%
+  arrange(rekord_id)
+
+pbl_marc_articles <- X005 %>%
+  full_join(.,X008,by = "rekord_id") %>%
+  full_join(.,X100,by = "rekord_id") %>%
+  full_join(.,X240,by = "rekord_id") %>%
+  full_join(.,X245,by = "rekord_id") %>%
+  full_join(.,X520,by = "rekord_id") %>%
+  full_join(.,X600,by = "rekord_id") %>%
+  full_join(.,X610,by = "rekord_id") %>%
+  full_join(.,X611,by = "rekord_id") %>%
+  full_join(.,X630,by = "rekord_id") %>%
+  full_join(.,X650,by = "rekord_id") %>%
+  full_join(.,X651,by = "rekord_id") %>%
+  full_join(.,X655,by = "rekord_id") %>%
+  full_join(.,X700,by = "rekord_id") %>%
+  full_join(.,X773,by = "rekord_id") %>%
+  full_join(.,X787,by = "rekord_id") %>%
+  full_join(.,X964,by = "rekord_id") %>%
+  full_join(.,XLKR,by = "rekord_id") %>%
+  cbind(.,LDR,X040,X001) %>%
+  select(noquote(order(colnames(.))))
+
+long <- reshape(pbl_marc_articles,
+                direction = "long",
+                varying = list(names(pbl_marc_articles)[-2]),
+                v.names = "Value",
+                idvar = "rekord_id",
+                timevar = "fields",
+                times = names(pbl_marc_articles)[-2]) %>%
+  arrange(rekord_id) %>%
+  mutate(Value = ifelse(is.na(Value)&fields=="X001",as.character(rekord_id),
+                        ifelse(is.na(Value),"",as.character(Value))),
+         fields = str_replace(fields,"^X{0,1}","=")) %>%
+  cSplit(.,"Value",sep = "|",direction = "long") %>%
+  mutate(Value = gsub("[\r\n]", " ",Value)) %>%
+  select(fields,Value) %>%
+  mutate(fields = ifelse(lead(fields=="=LDR"),paste(fields,"||",sep = ""),as.character(fields))) %>%
+  mutate(Value = ifelse(lead(fields=="=LDR"),paste(Value,"||",sep = ""),as.character(Value))) %>%
+  cSplit(.,c("fields","Value"),sep = "|",direction = "long")
+
+
+```
+
