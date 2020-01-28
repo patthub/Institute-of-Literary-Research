@@ -326,6 +326,87 @@ bn_ks <- bn_ks %>%
 bn_ok <- bn_ks %>%
   filter(!((is.na(osoba_bn_autor)&is.na(osoba_bn_temat))&dziedzina_PBL=="bez_ukd_PBL"&is.na(bez_ukd_ale_PBL)&is.na(czy_wspomnienia_reportaz)&is.na(slowa_literackie)))
 
+#czy tu usunąć zdublowane isbny?
+#020
+marc_field_020 <- bn_ok %>%
+  select(id,X020)%>%
+  filter(X020!="") %>%
+  mutate(X020=str_replace_all(X020,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X020",sep = "~",direction = "long") %>%
+  filter(X020!="") %>%
+  mutate(X020=str_remove_all(X020,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X020,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(bn_ok$X020,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_020)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_020<-cbind(marc_field_020,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_020$X020 <- str_replace(marc_field_020$X020,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_020[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_020$X020),str_replace_all(gsub(string,"\\3",marc_field_020$X020),"\\${2}.", "~"),NA)
+}
+marc_field_020 <- marc_field_020 %>%
+  select(id,isbn=`$a`)
+
+test <- bn_ok %>%
+  #filter(X020!="") %>%
+  filter(!grepl("\\$n",X245)) %>%
+  left_join(.,marc_field_020,by="id") %>%
+  mutate(porownanie = paste(isbn,substr(str_to_lower(str_replace_all(X245, "\\W", "")),4,14),str_extract(X300,"(?<=\\$a)(.*?)(?=,| )"),sep = "|"))
+
+count <- as.data.frame(table(test$porownanie))
+
+test <- merge(test,count,by.x = "porownanie",by.y = "Var1",all.x = TRUE) %>%
+  select(porownanie,Freq,2:155) %>%
+  arrange(-Freq,porownanie) %>%
+  select(porownanie,Freq,id) %>%
+  cSplit(.,"porownanie",sep = "|",direction = "wide")
+
+#poszukanie dystansu
+
+test2 <- test %>%
+  filter(!is.na(porownanie_1)) %>%
+  group_by(porownanie_1) %>%
+  mutate(Freq = paste(unique(Freq),collapse = "|"),
+         id = paste(unique(id),collapse = "|"),
+         porownanie_2 = paste(unique(porownanie_2),collapse = "|"),
+         porownanie_3 = paste(unique(porownanie_3),collapse = "|")) %>%
+  ungroup() %>%
+  unique()
+##
+
+test2 <- test$porownanie_2 %>%
+  unique()
+test2 <- as.vector(test2)
+
+test2 <- c("ola","jola")
+
+permutations <- as.data.frame(permutations(test2,2))
+permutations$distance <- adist(permutations$V1,permutations$V2)
+
+
+x <- 1:length(permutations$V1)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  permutations$distance[i] <- adist(permutations$V1[i],permutations$V2[i])
+}
+
+adist("abalatonmel","abalatommel") == 1
+#TUTAJ!!!
+
 #usunięcie zagranicznych zapisów, które nie są polonikami 
 #na podstawie braku wystąpień frazy "pol" w polach MARC
 nie_poloniki <- bn_ok %>%
@@ -675,6 +756,73 @@ bn_ok <- bn_ok %>%
 
 #write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
+
+```{r usunięcie dubli książek}
+test <- bn_ok %>%
+  select(id,X245,X260,X300,X830)
+#X245
+marc_field_245 <- test %>%
+  select(id,X245)%>%
+  filter(X245!="") %>%
+  mutate(X245=str_replace_all(X245,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X245",sep = "~",direction = "long") %>%
+  filter(X245!="") %>%
+  mutate(X245=str_remove_all(X245,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X245,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(test$X245,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_245)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_245<-cbind(marc_field_245,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_245$X245 <- str_replace(marc_field_245$X245,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_245[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_245$X245),str_replace_all(gsub(string,"\\3",marc_field_245$X245),"\\${2}.", "~"),NA)
+}
+marc_field_245 <- marc_field_245 %>%
+  select(id,`$a`,`$b`) %>%
+  filter(!is.na(`$a`)) %>%
+  group_by(id) %>%
+  mutate(`$a` = paste(`$a`,collapse = " "),
+         `$b` = paste(ifelse(is.na(`$b`),"",`$b`),collapse = " ")) %>%
+  ungroup() %>%
+  unique() %>%
+  mutate(X245ab = str_to_lower(str_replace_all(paste(`$a`,`$b`,sep = ""), "\\W", ""))) %>%
+  select(id,X245ab)
+
+#X300
+test <- test %>%
+  mutate(X300 = str_remove_all(X300,", \\[\\d+\\]")) %>%
+  left_join(.,marc_field_245,by="id") %>%
+  mutate(total = paste(X245ab,str_to_lower(str_replace_all(X260, "\\W", "")),str_to_lower(str_replace_all(X300, "\\W", "")),str_to_lower(str_replace_all(X830, "\\W", "")),sep = "|")) %>%
+  select(id,total) %>%
+  arrange(total)
+
+test %$%  
+    { total == dplyr::lag(total,) } %>% 
+    as.numeric() %>% 
+    {.} -> test$same
+test$same[1] <- 0
+
+test <- test %>%
+  left_join(.,bn_ok,by="id")
+
+write.csv2(test, "C:/Users/Cezary/Desktop/KP_sprawdza.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+
+```
+
 
 ```{r wyznaczenie zbioru na do uzupełnienia w przyszłości}
 na_pozniej <- bn_ok %>%
