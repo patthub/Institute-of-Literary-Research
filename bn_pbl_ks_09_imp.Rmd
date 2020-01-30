@@ -20,7 +20,6 @@ bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8
   filter(grepl("Książki",X380,ignore.case = FALSE)|X380=="") %>%
   filter(grepl("\\$aWA|\\$aW ",X040)) %>%
   filter(X655!="\\7$aKomiks$2DBN") %>%
-  arrange(X245) %>%
   mutate(licznik = 1:lengths(.))
 
 ### przenieść kolejnych autorów z 700 do pola 100
@@ -361,51 +360,118 @@ for (i in x) {
 marc_field_020 <- marc_field_020 %>%
   select(id,isbn=`$a`)
 
-test <- bn_ok %>%
-  #filter(X020!="") %>%
+distance1 <- bn_ok %>%
   filter(!grepl("\\$n",X245)) %>%
   left_join(.,marc_field_020,by="id") %>%
   mutate(porownanie = paste(isbn,substr(str_to_lower(str_replace_all(X245, "\\W", "")),4,14),str_extract(X300,"(?<=\\$a)(.*?)(?=,| )"),sep = "|"))
 
-count <- as.data.frame(table(test$porownanie))
+count <- as.data.frame(table(distance1$porownanie))
 
-test <- merge(test,count,by.x = "porownanie",by.y = "Var1",all.x = TRUE) %>%
+distance1 <- merge(distance1,count,by.x = "porownanie",by.y = "Var1",all.x = TRUE) %>%
   select(porownanie,Freq,2:155) %>%
   arrange(-Freq,porownanie) %>%
   select(porownanie,Freq,id) %>%
   cSplit(.,"porownanie",sep = "|",direction = "wide")
 
-#poszukanie dystansu
+#poszukanie dystansu Levenshteina == 1 przy takim samym ISBN
 
-test2 <- test %>%
+distance2 <- distance1 %>%
   filter(!is.na(porownanie_1)) %>%
   group_by(porownanie_1) %>%
-  mutate(Freq = paste(unique(Freq),collapse = "|"),
-         id = paste(unique(id),collapse = "|"),
-         porownanie_2 = paste(unique(porownanie_2),collapse = "|"),
-         porownanie_3 = paste(unique(porownanie_3),collapse = "|")) %>%
+  mutate(Freq = paste(Freq,collapse = "|"),
+         id = paste(id,collapse = "|"),
+         porownanie_2 = paste(porownanie_2,collapse = "|"),
+         porownanie_3 = paste(porownanie_3,collapse = "|")) %>%
   ungroup() %>%
-  unique()
-##
+  unique() %>%
+  mutate(ile = str_count(porownanie_2,"\\|")+1) %>%
+  arrange(-ile) %>%
+  mutate(id_grupy = 1:lengths(.)) %>%
+  filter(ile>1) %>%
+  cSplit(.,c("Freq","id","porownanie_2","porownanie_3"),sep = "|",direction = "long") %>%
+  unique() %>%
+  filter(!is.na(id))
 
-test2 <- test$porownanie_2 %>%
-  unique()
-test2 <- as.vector(test2)
-
-test2 <- c("ola","jola")
-
-permutations <- as.data.frame(permutations(test2,2))
-permutations$distance <- adist(permutations$V1,permutations$V2)
-
-
-x <- 1:length(permutations$V1)
+permutations <- data.frame(stringsAsFactors = FALSE)
+x <- 1:max(distance2$id_grupy)
 for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  permutations$distance[i] <- adist(permutations$V1[i],permutations$V2[i])
+  progress(match(i,x), max.value = length(x))
+  distance3 <- as.vector(unlist(distance2 %>% filter(id_grupy==i) %>% select(porownanie_2)))
+  iteration <- as.data.frame(permutations(distance3,2)) %>%
+    mutate(id_grupy = i)
+  y <- 1:length(iteration$V1)
+  for (j in y) {
+    progress(match(j,y), max.value = length(y))
+    iteration$distance[j] <- adist(iteration$V1[j],iteration$V2[j])
+  }
+  permutations <- rbind(permutations,iteration)
 }
 
-adist("abalatonmel","abalatommel") == 1
-#TUTAJ!!!
+permutations <- permutations %>%
+  filter(distance==1)
+
+distance2 <- distance2 %>%
+  filter(id_grupy %in% permutations$id_grupy) %>%
+  select(id,id_grupy)
+#połączyć distance2 z distance1, żeby wydobyć pełną listę zdublowanych książek
+duble_ksiazek <- distance1 %>%
+  unite("porownanie", porownanie_1:porownanie_3, sep = "|") %>%
+  filter(Freq>1) %>%
+  full_join(.,distance2,by="id")
+
+duble_ksiazek$same <- cumsum(!duplicated(duble_ksiazek$porownanie))
+
+duble_ksiazek <- duble_ksiazek %>%
+  arrange(id_grupy,same) %>%
+  mutate(id_grupy_dubli = ifelse(!is.na(id_grupy),as.character(id_grupy),paste("x",same,sep = ""))) %>%
+  select(id,id_grupy_dubli) %>%
+  arrange(id_grupy_dubli)
+
+duble_ksiazek$id_grupy_dubli <- cumsum(!duplicated(duble_ksiazek$id_grupy_dubli))
+#uzupełnienie całego zbioru o informację o dublu, wydobycie dubli do osobnego pliku i usuniecie ich z głównego pliku z rekordami bn; wskazanie listy interesujących pól
+bn_ok <- bn_ok %>%
+  left_join(.,duble_ksiazek,by="id") %>%
+  select(id, X008, X009, X015, X041, X044, X080, X100, X245, X246, X250, X260, X300, X380, X386, X490, X500, X501, X546, X600, X650, X655, X700, X710, X800, X830, rok, osoba_bn_autor, osoba_bn_temat, dziedzina_PBL, bez_ukd_ale_PBL, czy_wspomnienia_reportaz, slowa_literackie, id_grupy_dubli)
+
+duble_ksiazek <- bn_ok %>%
+  filter(!is.na(id_grupy_dubli)) %>%
+  arrange(id_grupy_dubli)
+
+bn_ok <- bn_ok %>%
+  filter(is.na(id_grupy_dubli))
+#wpisanie w zdublowane rekordy jak największej ilości danych (suma wszystkich dubli)
+duble_ksiazek <- duble_ksiazek %>%
+  arrange(id_grupy_dubli,-nchar(X015))
+duble_ksiazek[is.na(duble_ksiazek)] <- ""
+duble_naprawione <- data.frame(stringsAsFactors = FALSE)
+x <- 1:max(duble_ksiazek$id_grupy_dubli)
+y <- 4:33
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  iteration <- duble_ksiazek %>%
+    filter(id_grupy_dubli==i)
+  for (j in y) {
+    if (j==30) {
+      iteration[,j] <- iteration[,j][nchar(iteration[,j])==min(nchar(iteration[,j]))][1]
+    } else {
+        iteration[,j] <- iteration[,j][nchar(iteration[,j])==max(nchar(iteration[,j]))][1]
+      }
+  }
+  duble_naprawione <- rbind(duble_naprawione,iteration)
+}
+#pozostawienie pojedynczych wierszy dla książek
+duble_naprawione <- duble_naprawione[!duplicated(duble_naprawione$id_grupy_dubli),]
+duble_naprawione <- duble_naprawione %>%
+  mutate(osoba_bn_autor = ifelse(osoba_bn_autor!="",as.character(osoba_bn_autor),NA),
+         osoba_bn_temat = ifelse(osoba_bn_temat!="",as.character(osoba_bn_temat),NA),
+         dziedzina_PBL = ifelse(dziedzina_PBL!="",as.character(dziedzina_PBL),NA),
+         bez_ukd_ale_PBL = ifelse(bez_ukd_ale_PBL!="",as.character(bez_ukd_ale_PBL),NA),
+         czy_wspomnienia_reportaz = ifelse(czy_wspomnienia_reportaz!="",as.character(czy_wspomnienia_reportaz),NA),
+         slowa_literackie = ifelse(slowa_literackie!="",as.character(slowa_literackie),NA),)
+#połączenie unikatowych książek z dubli z całym zbiorem
+bn_ok <- bn_ok %>%
+  bind_rows(.,duble_naprawione) %>%
+  select(-id_grupy_dubli)
 
 #usunięcie zagranicznych zapisów, które nie są polonikami 
 #na podstawie braku wystąpień frazy "pol" w polach MARC
@@ -600,15 +666,14 @@ bn_ok <- bn_ok %>%
          rodzaj_ksiazki = ifelse(rodzaj_ksiazki=="","przedmiotowa",as.character(rodzaj_ksiazki)),
          rodzaj_ksiazki = ifelse(grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X490)|grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X830),"przedmiotowa",as.character(rodzaj_ksiazki)),
          ilu_tworcow = str_count(X100,"\\$a"),
-         rodzaj_ksiazki = ifelse(ilu_tworcow>4,"antologia",as.character(rodzaj_ksiazki))) %>%
+         rodzaj_ksiazki = ifelse(ilu_tworcow>4&rodzaj_ksiazki=="podmiotowa","antologia",as.character(rodzaj_ksiazki))) %>%
   select(1:29,rodzaj_ksiazki)
 ```
 
 ```{r wyznaczenie zbioru automatycznie IOK}
 IOK_podm <- bn_ok %>%
   filter(!grepl("\\$t",X700)) %>%
-  mutate(#X500 = ifelse(grepl("\\$aTyt[,\\.] oryg",X500),"",as.character(X500)),
-         ile_gatunkow = ifelse(rodzaj_ksiazki=="podmiotowa",str_count(X655,"\\$a"),"nie"),
+  mutate(ile_gatunkow = ifelse(rodzaj_ksiazki=="podmiotowa",str_count(X655,"\\$a"),"nie"),
          tylko_podmiotowe = ifelse(str_count(X655,"\\$a")>0&str_count(X655,"\\$a")==str_count(X655,"\\$y")&str_count(X655,"\\$y")!=str_count(X655,"\\$x"),"tak","nie")) %>%
   filter(str_count(X100,"\\$a")==1) %>%
   filter(!grepl("pseud|nazwa",X500,ignore.case = TRUE)&X501==""&(tylko_podmiotowe=="tak"|ile_gatunkow=="1")&X100!="")
@@ -756,73 +821,6 @@ bn_ok <- bn_ok %>%
 
 #write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
-
-```{r usunięcie dubli książek}
-test <- bn_ok %>%
-  select(id,X245,X260,X300,X830)
-#X245
-marc_field_245 <- test %>%
-  select(id,X245)%>%
-  filter(X245!="") %>%
-  mutate(X245=str_replace_all(X245,"(^|\\|)","~\\1")) %>%
-  cSplit(.,"X245",sep = "~",direction = "long") %>%
-  filter(X245!="") %>%
-  mutate(X245=str_remove_all(X245,"^\\|")) %>%
-  mutate(indicator = str_replace_all(X245,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(test$X245,"\\$.")
-subfield_list<- unique(unlist(subfield_list))
-empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_245)[1]))
-colnames(empty_table) <-subfield_list
-marc_field_245<-cbind(marc_field_245,empty_table)
-subfield_list_char <- paste("(",subfield_list,")",sep = "")
-subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
-
-x <- 1:length(subfield_list)
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  marc_field_245$X245 <- str_replace(marc_field_245$X245,subfield_list_char[i],"|\\1")
-}
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-  string_a <- "(^)(.*?\\|"
-  string_b <- subfield_list_char2[i]
-  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-  string <- paste(string_a,string_b,string_c,sep = "")
-  marc_field_245[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_245$X245),str_replace_all(gsub(string,"\\3",marc_field_245$X245),"\\${2}.", "~"),NA)
-}
-marc_field_245 <- marc_field_245 %>%
-  select(id,`$a`,`$b`) %>%
-  filter(!is.na(`$a`)) %>%
-  group_by(id) %>%
-  mutate(`$a` = paste(`$a`,collapse = " "),
-         `$b` = paste(ifelse(is.na(`$b`),"",`$b`),collapse = " ")) %>%
-  ungroup() %>%
-  unique() %>%
-  mutate(X245ab = str_to_lower(str_replace_all(paste(`$a`,`$b`,sep = ""), "\\W", ""))) %>%
-  select(id,X245ab)
-
-#X300
-test <- test %>%
-  mutate(X300 = str_remove_all(X300,", \\[\\d+\\]")) %>%
-  left_join(.,marc_field_245,by="id") %>%
-  mutate(total = paste(X245ab,str_to_lower(str_replace_all(X260, "\\W", "")),str_to_lower(str_replace_all(X300, "\\W", "")),str_to_lower(str_replace_all(X830, "\\W", "")),sep = "|")) %>%
-  select(id,total) %>%
-  arrange(total)
-
-test %$%  
-    { total == dplyr::lag(total,) } %>% 
-    as.numeric() %>% 
-    {.} -> test$same
-test$same[1] <- 0
-
-test <- test %>%
-  left_join(.,bn_ok,by="id")
-
-write.csv2(test, "C:/Users/Cezary/Desktop/KP_sprawdza.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
-
-```
-
 
 ```{r wyznaczenie zbioru na do uzupełnienia w przyszłości}
 na_pozniej <- bn_ok %>%
@@ -1039,7 +1037,7 @@ PBL_hasla_osobowe <- sheets_read(ss = "1zbwjnrtWGvbjrQTLMavJcWSu7HfP0I-USNgZ_KWi
 colnames(PBL_hasla_osobowe) <- c("DZ_DZIAL_ID","DZ_NAZWA","redaktor_dzialu","nazwa")
 ```
 
-```{r przypisanie redaktorów do przedmiotowej i podmiotowej}
+```{r przypisanie redaktorów do przedmiotowej, podmiotowej i antologii}
 przedmiotowa_redaktorzy <- bn_ok %>%
   filter(rodzaj_ksiazki=="przedmiotowa")
 ###przypisanie redaktora na podstawie osoby z 600 jako tematu - książki o twórcy
@@ -2094,15 +2092,14 @@ bn_ok <- bn_ok %>%
   mutate(ZA_UWAGI = 1:nrow(.))
 ```
 ```{r problemy}
-#spróbować zająć się książkami zdublowanymi
-#czy do opisu fizycznego dodać uwagi z 501? - nie, raczej nei dodawać
-#wsbogacić 500 i 546 o wystąpienia fraz dotycz oraz pol, case sensitive = false; upewnić się, że jeśli jest kilka $a, to wchodzi tylko to, które ma interesujące nas słowo, nic więcej
-#wprawdzić długość pól w bazie i wydrukować informację, jeśli fraza jest zbyt długa dla oracle'a
-#co zrobić, jeśli książka ma więcej, niż 4 osoby w 100? -> jeśli jest podmiotowa, to zrobić antologię, a wszystkie osoby przenieść do adnotacji; jeśli jest inna niż podmiotowa, to ok, bo będzie tylu autorów
+#wprawdzić długość pól w bazie i wydrukować informację, jeśli fraza jest zbyt długa dla oracle'a - to już jest w ostatnim chunku: przycinanie zbyt długich komórek -- zająć się TYM, trzeba dać to wcześniej i naprawić, bo źle dodrukowuje do adnotacji
+#zastosować uwagi z githuba
+#sprawdzić, czy generowanie list do nadpisania nie powinno zostać w jakikolwiek sposób uwzględnione
+#zrobić współwydanie
 
-x501 <- bn_ok %>%
-  select(X501,X500) %>%
-  filter(X501!="")
+#pomyśleć o pętli, która będzie przygotowywała pliki po 2000 wierszy
+
+
 
 ```
 
@@ -2562,16 +2559,22 @@ BN_wspoltworca <- BN_wspoltworca %>%
 #7: opis współtwórców
 za_opis_wspoltworcow <- BN_wspoltworca %>%
   select(ZA_UWAGI,funkcja,OS_IMIE,OS_NAZWISKO) %>%
-  filter(!is.na(OS_NAZWISKO)) %>%
-  mutate(OS_IMIE = ifelse(OS_IMIE=="*","",as.character(OS_IMIE)),
-         opis = paste(funkcja,OS_IMIE, OS_NAZWISKO, sep = " "),
+  full_join(.,marc_field_245,by="ZA_UWAGI") %>%
+  filter(!is.na(OS_NAZWISKO)|(is.na(OS_NAZWISKO)&grepl("et al\\.",X245c))) %>%
+  mutate(jest_et_al = grepl("et al\\.",X245c),
+         OS_IMIE = ifelse(OS_IMIE=="*","",as.character(OS_IMIE)),
+         opis = ifelse(!is.na(OS_NAZWISKO),paste(funkcja,OS_IMIE, OS_NAZWISKO, sep = " "),""),
          opis = str_replace_all(opis," +"," "),
          opis = ifelse(opis==" ","",as.character(opis))) %>%
-  select(ZA_UWAGI,opis) %>%
+  select(ZA_UWAGI,opis,jest_et_al) %>%
   group_by(ZA_UWAGI) %>%
-  mutate(opis = paste(opis,collapse = ", ")) %>%
+  mutate(opis = paste(opis,collapse = ", "),
+         jest_et_al = paste(unique(jest_et_al),sep = "")) %>%
   ungroup() %>%
   unique() %>%
+  mutate(opis = ifelse(jest_et_al==TRUE&opis=="","et al.",
+                       ifelse(jest_et_al,paste(opis,"et al.",sep = " "),opis))) %>%
+  select(ZA_UWAGI,opis) %>%
   right_join(.,data %>% select(ZA_UWAGI),by="ZA_UWAGI")
 
 #8 wydanie
@@ -2766,7 +2769,7 @@ for (i in x) {
   marc_field_500[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_500$X500),str_replace_all(gsub(string,"\\3",marc_field_500$X500),"\\${2}.", "~"),NA)
 }
 marc_field_500 <- marc_field_500 %>%
-  filter(!grepl("oryg(\\.|\\,)",X500)&grepl("pseud|nazwa",X500)) %>%
+  filter(!grepl("oryg(\\.|\\,)",X500)&grepl("pseud|nazwa|dotycz|pol",X500,ignore.case = TRUE)) %>%
   mutate(`$a` = str_remove(`$a`," \\;+$| \\:+$"))
   
 #pole 546 do opisu fizycznego
@@ -3022,6 +3025,17 @@ out$za_adnotacje[out$same == 1] <- ""
 
 out <- out %>%
   select(1:32)
+#tutaj
+#ucięcie zbyt długich ciągów znaków, by weszły do oracle'a
+dlugosci <- data.frame(pole = c("am_nazwisko", "am_imie", "za_tytul", "za_tytul_oryginalu", "za_jezyk_oryginalu", "os_nazwisko", "os_imie", "za_opis_wspoltworcow", "za_instytucja", "wy_miejsce", "wy_nazwa", "za_opis_fizyczny_ksiazki", "za_seria_wydawnicza", "tw_nazwisko", "tw_imie", "za_adnotacje"), liczba_znakow = c(50,40,500,500,100,50,40,500,255,40,255,1000,255,200,40,2000))
+x <- match(dlugosci$pole,names(out))
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  dlugosc <- dlugosci$liczba_znakow[match(names(out[i]),dlugosci$pole)]
+  out$za_adnotacje <- ifelse(dlugosc<nchar(as.character(out[,i])),
+                             ifelse(za_adnotacje!="",paste(out$za_adnotacje,paste("UWAGA! Pole ", as.character(names(out[i]))," było zbyt długie i zostało przycięte. Zredaguj treść pola.",sep = ""),sep = "# "),paste("UWAGA! Pole ", as.character(names(out[i]))," było zbyt długie i zostało przycięte. Zredaguj treść pola.",sep = "")),as.character(out$za_adnotacje))
+  out[,i] <- ifelse(dlugosc<nchar(as.character(out[,i])),as.character(substr(out[,i],1,dlugosc)),as.character(out[,i]))
+}
 
 write.csv2(out, "C:/Users/Cezary/Desktop/2009_podmiotowa_do_importu.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 #test <- out %>%
@@ -3031,12 +3045,6 @@ write.csv2(out, "C:/Users/Cezary/Desktop/2009_podmiotowa_do_importu.csv", row.na
 #  mutate(rekord_BN = as.integer(rekord_BN)) %>%
 #  left_join(.,data %>% select(1:26,42), by=c("rekord_BN"="ZA_UWAGI"))
 #write.csv2(test, "C:/Users/Cezary/Desktop/2009_imp_test.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
-
-
-
-#pomyśleć o pętli, która będzie przygotowywała pliki po 2000 wierszy
-#zrobić przedmiotowe, antologie i współwydania
-#przejrzeć github i nanieść korekty
 ```
 
 ```{r książki przedmiotowe}
@@ -3462,16 +3470,22 @@ BN_wspoltworca <- BN_wspoltworca %>%
 #7: opis współtwórców
 za_opis_wspoltworcow <- BN_wspoltworca %>%
   select(ZA_UWAGI,funkcja,OS_IMIE,OS_NAZWISKO) %>%
-  filter(!is.na(OS_NAZWISKO)) %>%
-  mutate(OS_IMIE = ifelse(OS_IMIE=="*","",as.character(OS_IMIE)),
-         opis = paste(funkcja,OS_IMIE, OS_NAZWISKO, sep = " "),
+  full_join(.,marc_field_245,by="ZA_UWAGI") %>%
+  filter(!is.na(OS_NAZWISKO)|(is.na(OS_NAZWISKO)&grepl("et al\\.",X245c))) %>%
+  mutate(jest_et_al = grepl("et al\\.",X245c),
+         OS_IMIE = ifelse(OS_IMIE=="*","",as.character(OS_IMIE)),
+         opis = ifelse(!is.na(OS_NAZWISKO),paste(funkcja,OS_IMIE, OS_NAZWISKO, sep = " "),""),
          opis = str_replace_all(opis," +"," "),
          opis = ifelse(opis==" ","",as.character(opis))) %>%
-  select(ZA_UWAGI,opis) %>%
+  select(ZA_UWAGI,opis,jest_et_al) %>%
   group_by(ZA_UWAGI) %>%
-  mutate(opis = paste(opis,collapse = ", ")) %>%
+  mutate(opis = paste(opis,collapse = ", "),
+         jest_et_al = paste(unique(jest_et_al),sep = "")) %>%
   ungroup() %>%
   unique() %>%
+  mutate(opis = ifelse(jest_et_al==TRUE&opis=="","et al.",
+                       ifelse(jest_et_al,paste(opis,"et al.",sep = " "),opis))) %>%
+  select(ZA_UWAGI,opis) %>%
   right_join(.,data %>% select(ZA_UWAGI),by="ZA_UWAGI")
 
 #8 wydanie
@@ -3666,7 +3680,7 @@ for (i in x) {
   marc_field_500[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_500$X500),str_replace_all(gsub(string,"\\3",marc_field_500$X500),"\\${2}.", "~"),NA)
 }
 marc_field_500 <- marc_field_500 %>%
-  filter(!grepl("oryg(\\.|\\,)",X500)&grepl("pseud|nazwa",X500)) %>%
+  filter(!grepl("oryg(\\.|\\,)",X500)&grepl("pseud|nazwa|dotycz|pol",X500,ignore.case = TRUE)) %>%
   mutate(`$a` = str_remove(`$a`," \\;+$| \\:+$"))
   
 #pole 546 do opisu fizycznego
@@ -3949,9 +3963,18 @@ pola_pbl <- data %>%
   mutate(ZA_TYPE = "KS")
 #2: autor
 BN_autor <- data %>%
+  select(ZA_UWAGI) %>%
+  mutate(AM_AUTOR_ID = NA,
+         AM_NAZWISKO = NA,
+         AM_IMIE = NA)
+
+#adnotacje z autorów
+#w antologii adnotacja musi być wcześniej, żeby na górze było info o tekstach autorów
+
+ZA_ADNOTACJE <- data %>%
   select(X100,X245,ZA_UWAGI)
 #pole 100
-marc_field_100 <- BN_autor %>%
+marc_field_100 <- ZA_ADNOTACJE %>%
   select(ZA_UWAGI,X100)%>%
   filter(X100!="") %>%
   mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
@@ -3959,7 +3982,7 @@ marc_field_100 <- BN_autor %>%
   filter(X100!="") %>%
   mutate(X100=str_remove_all(X100,"^\\|")) %>%
   mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(BN_autor$X100,"\\$.")
+subfield_list<- str_extract_all(ZA_ADNOTACJE$X100,"\\$.")
 subfield_list<- unique(unlist(subfield_list))
 empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
 colnames(empty_table) <-subfield_list
@@ -3982,39 +4005,8 @@ for (i in x) {
   marc_field_100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_100$X100),str_replace_all(gsub(string,"\\3",marc_field_100$X100),"\\${2}.", "~"),NA)
 }
 
-#pole 245
-marc_field_245 <- BN_autor %>%
-  select(ZA_UWAGI,X245)%>%
-  filter(X245!="") %>%
-  mutate(X245=str_replace_all(X245,"(^|\\|)","~\\1")) %>%
-  cSplit(.,"X245",sep = "~",direction = "long") %>%
-  filter(X245!="") %>%
-  mutate(X245=str_remove_all(X245,"^\\|")) %>%
-  mutate(indicator = str_replace_all(X245,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(BN_autor$X245,"\\$.")
-subfield_list<- unique(unlist(subfield_list))
-empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_245)[1]))
-colnames(empty_table) <-subfield_list
-marc_field_245<-cbind(marc_field_245,empty_table)
-subfield_list_char <- paste("(",subfield_list,")",sep = "")
-subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
-
-x <- 1:length(subfield_list)
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  marc_field_245$X245 <- str_replace(marc_field_245$X245,subfield_list_char[i],"|\\1")
-}
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-  string_a <- "(^)(.*?\\|"
-  string_b <- subfield_list_char2[i]
-  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-  string <- paste(string_a,string_b,string_c,sep = "")
-  marc_field_245[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_245$X245),str_replace_all(gsub(string,"\\3",marc_field_245$X245),"\\${2}.", "~"),NA)
-}
 #tutaj może być błąd ze względu na brak kolumny $b, wtedy należy zmienić linię z selectem i zakomentować linię: mutate(`$a` = ifelse(!is.na(`$b`),paste(`$a`,`$b`,sep = " "),as.character(`$a`))) %>%
-BN_autor <- marc_field_100 %>%
+ZA_ADNOTACJE <- marc_field_100 %>%
   #select(ZA_UWAGI,`$a`,`$b`) %>%
   select(ZA_UWAGI,`$a`) %>%
   unique() %>%
@@ -4026,25 +4018,12 @@ BN_autor <- marc_field_100 %>%
          AM_IMIE = ifelse(grepl("\\|",`$a`),"*",
                           ifelse(grepl(",",`$a`),str_replace_all(`$a`,"(.*?)(, )(.*)","\\3"),"*"))) %>%
   select(ZA_UWAGI,AM_NAZWISKO,AM_IMIE) %>%
-  left_join(.,marc_field_245,by="ZA_UWAGI") %>%
-  select(ZA_UWAGI,AM_NAZWISKO,AM_IMIE, X245c = `$c`)
-  
-x <- 1:lengths(BN_autor[1])
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  BN_autor$czy_nazwisko[i] <- grepl(BN_autor$AM_NAZWISKO[i],BN_autor$X245c[i])
-  BN_autor$czy_imie[i] <- grepl(BN_autor$AM_IMIE[i],BN_autor$X245c[i])
-}
-
-BN_autor <- BN_autor %>%
-  mutate(ZA_ADNOTACJE = ifelse(czy_nazwisko==FALSE|czy_imie==FALSE,paste("UWAGA! Konflikt w danych osobowych w polach 100 i 245. Porównaj pole autor w formularzu z polem BN: ",X245c,sep = ""),NA)) %>%
-  select(ZA_UWAGI,AM_NAZWISKO,AM_IMIE,ZA_ADNOTACJE) %>%
-  mutate(nazwa = str_replace_all(str_to_lower(paste(AM_NAZWISKO,AM_IMIE, sep = "")), "\\W", "")) %>%
-  left_join(.,PBL_autorzy %>% select(AM_AUTOR_ID,AM_KRYPTONIM,AM_LICZBA_ZAPISOW,nazwa) %>% filter(is.na(AM_KRYPTONIM)),by="nazwa") %>%
-  arrange(ZA_UWAGI,AM_NAZWISKO,AM_IMIE,-AM_LICZBA_ZAPISOW)
-BN_autor$id_grupy <- cumsum(!duplicated(BN_autor[1:3]))
-BN_autor <- BN_autor[!duplicated(BN_autor$id_grupy),] %>%
-  select(ZA_UWAGI,AM_NAZWISKO,AM_IMIE,ZA_ADNOTACJE,AM_AUTOR_ID)
+  unite("ZA_ADNOTACJE", AM_IMIE:AM_NAZWISKO, sep = " ") %>%
+  group_by(ZA_UWAGI) %>%
+  mutate(ZA_ADNOTACJE = paste("[Teksty aut.:]",paste(ZA_ADNOTACJE,collapse = ", "),sep = " ")) %>%
+  ungroup() %>%
+  unique() %>%
+  right_join(.,data %>% select(ZA_UWAGI),by="ZA_UWAGI")
 
 #3: tytuł
 #pole 245
@@ -4396,16 +4375,22 @@ BN_wspoltworca <- BN_wspoltworca %>%
 #7: opis współtwórców
 za_opis_wspoltworcow <- BN_wspoltworca %>%
   select(ZA_UWAGI,funkcja,OS_IMIE,OS_NAZWISKO) %>%
-  filter(!is.na(OS_NAZWISKO)) %>%
-  mutate(OS_IMIE = ifelse(OS_IMIE=="*","",as.character(OS_IMIE)),
-         opis = paste(funkcja,OS_IMIE, OS_NAZWISKO, sep = " "),
+  full_join(.,marc_field_245,by="ZA_UWAGI") %>%
+  filter(!is.na(OS_NAZWISKO)|(is.na(OS_NAZWISKO)&grepl("et al\\.",X245c))) %>%
+  mutate(jest_et_al = grepl("et al\\.",X245c),
+         OS_IMIE = ifelse(OS_IMIE=="*","",as.character(OS_IMIE)),
+         opis = ifelse(!is.na(OS_NAZWISKO),paste(funkcja,OS_IMIE, OS_NAZWISKO, sep = " "),""),
          opis = str_replace_all(opis," +"," "),
          opis = ifelse(opis==" ","",as.character(opis))) %>%
-  select(ZA_UWAGI,opis) %>%
+  select(ZA_UWAGI,opis,jest_et_al) %>%
   group_by(ZA_UWAGI) %>%
-  mutate(opis = paste(opis,collapse = ", ")) %>%
+  mutate(opis = paste(opis,collapse = ", "),
+         jest_et_al = paste(unique(jest_et_al),sep = "")) %>%
   ungroup() %>%
   unique() %>%
+  mutate(opis = ifelse(jest_et_al==TRUE&opis=="","et al.",
+                       ifelse(jest_et_al,paste(opis,"et al.",sep = " "),opis))) %>%
+  select(ZA_UWAGI,opis) %>%
   right_join(.,data %>% select(ZA_UWAGI),by="ZA_UWAGI")
 
 #8 wydanie
@@ -4600,7 +4585,7 @@ for (i in x) {
   marc_field_500[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_500$X500),str_replace_all(gsub(string,"\\3",marc_field_500$X500),"\\${2}.", "~"),NA)
 }
 marc_field_500 <- marc_field_500 %>%
-  filter(!grepl("oryg(\\.|\\,)",X500)&grepl("pseud|nazwa",X500)) %>%
+  filter(!grepl("oryg(\\.|\\,)",X500)&grepl("pseud|nazwa|dotycz|pol",X500,ignore.case = TRUE)) %>%
   mutate(`$a` = str_remove(`$a`," \\;+$| \\:+$"))
   
 #pole 546 do opisu fizycznego
@@ -4714,7 +4699,7 @@ za_tomy <- data %>%
 #14: adnotacje
 za_adnotacje <- data %>%
   select(ZA_UWAGI) %>%
-  left_join(.,BN_autor %>% select(ZA_UWAGI,ZA_ADNOTACJE),by="ZA_UWAGI") %>%
+  left_join(.,ZA_ADNOTACJE %>% select(ZA_UWAGI,ZA_ADNOTACJE),by="ZA_UWAGI") %>%
   left_join(.,BN_wspoltworca %>% select(ZA_UWAGI,ZA_ADNOTACJE),by="ZA_UWAGI") %>%
   mutate(ZA_ADNOTACJE = paste(ifelse(is.na(ZA_ADNOTACJE.x),"",paste(as.character(ZA_ADNOTACJE.x),"# ",sep = "")),ifelse(is.na(ZA_ADNOTACJE.y),"",as.character(ZA_ADNOTACJE.y)),sep = ""),
          ZA_ADNOTACJE = str_remove(ZA_ADNOTACJE,"(# )+$")) %>%
@@ -4726,10 +4711,6 @@ za_adnotacje <- za_adnotacje[!duplicated(za_adnotacje$id_grupy),] %>%
   select(-id_grupy)
 
 #wyrównanie liczby wierszy do liczby wierszy obiektu data
-BN_autor <- data %>%
-  select(ZA_UWAGI) %>%
-  left_join(.,BN_autor %>% select(ZA_UWAGI,AM_AUTOR_ID,AM_NAZWISKO,AM_IMIE),by="ZA_UWAGI") %>%
-  ddply(., .(ZA_UWAGI), summarize, AM_AUTOR_ID = paste(AM_AUTOR_ID, collapse="|"), AM_NAZWISKO = paste(AM_NAZWISKO, collapse="|"), AM_IMIE = paste(AM_IMIE, collapse="|"))
 BN_wspoltworca <- data %>%
   select(ZA_UWAGI) %>%
   left_join(.,BN_wspoltworca %>% select(ZA_UWAGI,OS_OSOBA_ID,OS_NAZWISKO,OS_IMIE,fo_symbol),by="ZA_UWAGI") %>%
@@ -4875,12 +4856,8 @@ write.csv2(out, "C:/Users/Cezary/Desktop/2009_antologie_do_importu.csv", row.nam
 ```
 
 ```{r sprawdzić, czy coś się przyda}
----
-title: "R Notebook"
-output: html_notebook
----
 
-```{r brakujące gatunki}
+###brakujące gatunki
 options(scipen = 999)
 library(googlesheets)
 library(zoo)
@@ -5259,8 +5236,6 @@ colnames(test) <- c("ile_oryg", "ile_cudzys", "ile_dat", "Freq")
 
 ```
 
-
-```
 
 
 ```{r podmiotowa - pomoc}
