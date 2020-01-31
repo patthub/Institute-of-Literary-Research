@@ -666,7 +666,8 @@ bn_ok <- bn_ok %>%
          rodzaj_ksiazki = ifelse(rodzaj_ksiazki=="","przedmiotowa",as.character(rodzaj_ksiazki)),
          rodzaj_ksiazki = ifelse(grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X490)|grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X830),"przedmiotowa",as.character(rodzaj_ksiazki)),
          ilu_tworcow = str_count(X100,"\\$a"),
-         rodzaj_ksiazki = ifelse(ilu_tworcow>4&rodzaj_ksiazki=="podmiotowa","antologia",as.character(rodzaj_ksiazki))) %>%
+         rodzaj_ksiazki = ifelse(ilu_tworcow>4&rodzaj_ksiazki=="podmiotowa","antologia",as.character(rodzaj_ksiazki)),
+         rodzaj_ksiazki = ifelse(grepl("Legendy",X655),"antologia",as.character(rodzaj_ksiazki))) %>%
   select(1:30,rodzaj_ksiazki)
 ```
 
@@ -2091,25 +2092,48 @@ bn_ok <- bn_ok %>%
 bn_ok <- bn_ok %>%
   mutate(ZA_UWAGI = 1:nrow(.))
 ```
+
 ```{r problemy}
 
-#zastosować uwagi z githuba
-#sprawdzić, czy generowanie list do nadpisania nie powinno zostać w jakikolwiek sposób uwzględnione
+#przygotować wszystko dookoła - listy pracowników; wysłać z R od razu na dysk?
 #zrobić współwydanie
-#przygotowanie linku w formularzu, żeby przenosiło na stronę konkretnej książki !!! - kontakt z Matysiakiem
-
-
-test <- out %>%
-  select(za_opis_wspoltworcow) %>%
-  filter(grepl("\\|",za_opis_wspoltworcow))
-
 
 ```
 
 
 ```{r książki podmiotowe}
 data <- bn_ok %>%
-  filter(rodzaj_ksiazki=="podmiotowa")
+  filter(rodzaj_ksiazki=="podmiotowa") %>%
+  mutate(redaktor_dzialu = paste(redaktor_dzialu,"_podm",sep = ""))
+#ujednolicenie literatury dla kilku zapisów nowego twórcy
+kilka_literatur_nowego_tworcy <- data %>%
+  select(id,TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE,DZ_DZIAL_ID,DZ_NAZWA,redaktor_dzialu) %>%
+  filter(is.na(TW_TWORCA_ID)&!is.na(TW_NAZWISKO)) %>%
+  select(-TW_TWORCA_ID) %>%
+  arrange(TW_NAZWISKO,TW_IMIE) %>%
+  group_by_at(vars(2:3)) %>%
+  mutate(unikatowy_dzial = paste(unique(DZ_DZIAL_ID),collapse = "|"),
+         DZ_DZIAL_ID = paste(DZ_DZIAL_ID,collapse = "|"),
+         DZ_NAZWA = paste(DZ_NAZWA,collapse = "|"),
+         redaktor_dzialu = paste(redaktor_dzialu,collapse = "|"),
+         id = paste(id,collapse = "|")) %>%
+  ungroup() %>%
+  unique() %>%
+  filter(grepl("\\|",unikatowy_dzial)) %>%
+  select(-unikatowy_dzial) %>%
+  mutate(id_grupy = 1:lengths(.)) %>%
+  cSplit(.,c("id","DZ_DZIAL_ID","DZ_NAZWA","redaktor_dzialu"),sep = "|",direction = "long")
+
+kilka_literatur_nowego_tworcy[,2:7][duplicated(kilka_literatur_nowego_tworcy$id_grupy),] <- NA
+kilka_literatur_nowego_tworcy <- fill_(kilka_literatur_nowego_tworcy, names(kilka_literatur_nowego_tworcy))
+#zaktualizowanie zbioru podmiotowych o ujednolicone działy dla nowych twórców
+x <- 1:length(kilka_literatur_nowego_tworcy$id)
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  data$DZ_DZIAL_ID[data$id==kilka_literatur_nowego_tworcy$id[i]] <- kilka_literatur_nowego_tworcy$DZ_DZIAL_ID[i]
+  data$DZ_NAZWA[data$id==kilka_literatur_nowego_tworcy$id[i]] <- as.character(kilka_literatur_nowego_tworcy$DZ_NAZWA)[i]
+  data$redaktor_dzialu[data$id==kilka_literatur_nowego_tworcy$id[i]] <- as.character(kilka_literatur_nowego_tworcy$redaktor_dzialu)[i]
+}
 #uwolnienie kolumn z danymi z bn i przetworzenie do PBL
 #1: za_uwagi, rz_nazwa, za_ro_rok, za_type, rz_rodzaj_id, tw_tworca_id, tw_nazwisko, tw_imie, dz_dzial_id, dz_nazwa, redaktor_dzialu
 pola_pbl <- data %>%
@@ -2287,7 +2311,8 @@ gatunki_bn <- sqldf("select *
                       left join gatunki_pbl on lower(gatunki_bn.X650) like '%'||gatunki_pbl.gatunek||'%'")
 colnames(gatunki_bn)[5] <- "gatunek2"
 gatunki_bn <- gatunki_bn %>%
-  mutate(gatunek = ifelse(is.na(gatunek)&!is.na(gatunek2),as.character(gatunek2),as.character(gatunek))) %>%
+  mutate(gatunek = ifelse(is.na(gatunek)&!is.na(gatunek2),as.character(gatunek2),as.character(gatunek)),
+         gatunek = ifelse(grepl("przypowieść",X655,ignore.case = TRUE)&!grepl("[^y]powieść",X655)&gatunek=="powieść","opowiadanie",as.character(gatunek))) %>%
   filter(!is.na(gatunek)) %>%
   select(ZA_UWAGI,gatunek) %>%
   mutate(gatunek = ifelse(gatunek=="dramat","tekst dramatyczny",
@@ -3069,7 +3094,7 @@ polaczone <- data %>%
   left_join(.,za_seria_wydawnicza,by = "ZA_UWAGI") %>%
   left_join(.,za_tomy,by = "ZA_UWAGI") %>%
   left_join(.,za_adnotacje,by = "ZA_UWAGI") %>%
-  left_join(.,BN_URL,by = "ZA_UWAGI")
+  left_join(.,BN_URL,by = "ZA_UWAGI") %>%
   select(noquote(kolejnosc))
 colnames(polaczone) <- c("rekord_BN","rz_nazwa","za_ro_rok","za_type","rz_rodzaj_id","DZ_NAZWA","DZ_DZIAL_ID","tw_tworca_id","am_autor_id","am_nazwisko","am_imie","za_tytul","za_tytul_oryginalu","za_jezyk_oryginalu","os_osoba_id","os_nazwisko","os_imie","fo_symbol","za_opis_wspoltworcow","za_wydanie","za_tomy","za_instytucja","wy_wydawnictwo_id","wy_miejsce","wy_nazwa","za_rok_wydania","za_opis_fizyczny_ksiazki","za_seria_wydawnicza","tw_nazwisko","tw_imie","pracownik","za_adnotacje","BN_URL")
 
@@ -3078,7 +3103,7 @@ x <- 1:(length(polaczone)-1)
 for (i in x) {
   progress(match(i,x), max.value = length(x))
   polaczone$za_adnotacje <- ifelse(grepl("<U\\+(....)>",polaczone[,i]),
-                                   ifelse(nchar(polaczone$za_adnotacje)!=0,paste(polaczone$za_adnotacje,paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Szukaj frazy \"???\"",sep = ""),sep = "# "),paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Szukaj frazy \"???\"",sep = "")),as.character(polaczone$za_adnotacje))
+                                   ifelse(nchar(polaczone$za_adnotacje)!=0,paste(polaczone$za_adnotacje,paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Znajdź frazę \"???\" i zredaguj pole.",sep = ""),sep = "# "),paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Znajdź frazę \"???\" i zredaguj pole.",sep = "")),as.character(polaczone$za_adnotacje))
   polaczone[,i] <- gsub("<U\\+(....)>", "???", polaczone[,i])
 }
 #zasygnalizowanie obecności znaku $ w którymś z pól
@@ -3086,11 +3111,18 @@ X <- 1:(length(polaczone)-1)
 for (i in x) {
   progress(match(i,x), max.value = length(x))
   polaczone$za_adnotacje <- ifelse(grepl("\\$",polaczone[,i]),
-                                   ifelse(nchar(polaczone$za_adnotacje)==0,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Przeredaguj treść pola.",sep = ""),paste(polaczone$za_adnotacje,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Przeredaguj treść pola.",sep = ""),sep = "# ")),as.character(polaczone$za_adnotacje))
+                                   ifelse(nchar(polaczone$za_adnotacje)==0,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Zredaguj treść pola.",sep = ""),paste(polaczone$za_adnotacje,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Zredaguj treść pola.",sep = ""),sep = "# ")),as.character(polaczone$za_adnotacje))
+}
+#zasygnalizowanie obecności frazy "character(0)" w którymś z pól
+X <- 1:(length(polaczone)-1)
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  polaczone$za_adnotacje <- ifelse(polaczone[,i]=="character(0)",
+                                   ifelse(nchar(polaczone$za_adnotacje)==0,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano frazę \"character(0)\". Zredaguj treść pola.",sep = ""),paste(polaczone$za_adnotacje,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano frazę \"character(0)\". Zredaguj treść pola.",sep = ""),sep = "# ")),as.character(polaczone$za_adnotacje))
 }
 #zasygnalizowanie obecności znaku # w opisie współtwórców
 polaczone$za_adnotacje <- ifelse(grepl("\\#",polaczone$za_opis_wspoltworcow),
-                                   ifelse(nchar(polaczone$za_adnotacje)==0,"UWAGA! Ze względu na konflikt w opisie współtwórców wybierz właściwą wartość (strefa odpowiedzialności \"#\" współtwórcy z pola 700)",paste(polaczone$za_adnotacje,"UWAGA! Ze względu na konflikt w opisie współtwórców wybierz właściwą wartość (strefa odpowiedzialności # współtwórcy z pola 700)",sep = "# ")),as.character(polaczone$za_adnotacje))
+                                   ifelse(nchar(polaczone$za_adnotacje)==0,"UWAGA! Ze względu na konflikt w opisie współtwórców wybierz właściwą wartość (strefa odpowiedzialności \"#\" współtwórcy z pola 700).",paste(polaczone$za_adnotacje,"UWAGA! Ze względu na konflikt w opisie współtwórców wybierz właściwą wartość (strefa odpowiedzialności # współtwórcy z pola 700).",sep = "# ")),as.character(polaczone$za_adnotacje))
 #korekta automatycznego IOK
 automatyczny_IOK <- polaczone %>%
   mutate(czy_tyt_oryg = (!grepl("polsk",DZ_NAZWA)&!is.na(za_tytul_oryginalu))|grepl("polsk",DZ_NAZWA)) %>%
@@ -3191,7 +3223,9 @@ out$pracownik[out$same == 1] <- ""
 out$za_adnotacje[out$same == 1] <- ""
 out$BN_URL[out$same == 1] <- ""
 
+#przypisanie do automatycznego OK redaktora "automat"
 out <- out %>%
+  mutate(pracownik = ifelse(rekord_BN %in% automatyczny_IOK$rekord_BN,"AUTOMAT",as.character(pracownik))) %>%
   select(1:33)
 
 #pętla zapisująca po ok. 2000 wierszy z uwzględnieniem kompletności rekordów bibliograficznych rozpisanych na kilka wierszy
@@ -3215,7 +3249,8 @@ for (i in x) {
 ```{r książki przedmiotowe}
 #przeredagować skrypt z podmiotowej
 data <- bn_ok %>%
-  filter(rodzaj_ksiazki=="przedmiotowa")
+  filter(rodzaj_ksiazki=="przedmiotowa") %>%
+  mutate(redaktor_dzialu = paste(redaktor_dzialu,"_przedm",sep = ""))
 #uwolnienie kolumn z danymi z bn i przetworzenie do PBL
 #1: za_uwagi, rz_nazwa, za_ro_rok, za_type, rz_rodzaj_id, tw_tworca_id, tw_nazwisko, tw_imie, dz_dzial_id, dz_nazwa, redaktor_dzialu
 pola_pbl <- data %>%
@@ -4151,7 +4186,7 @@ x <- 1:(length(polaczone)-1)
 for (i in x) {
   progress(match(i,x), max.value = length(x))
   polaczone$za_adnotacje <- ifelse(grepl("<U\\+(....)>",polaczone[,i]),
-                                   ifelse(nchar(polaczone$za_adnotacje)!=0,paste(polaczone$za_adnotacje,paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Szukaj frazy \"???\"",sep = ""),sep = "# "),paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Szukaj frazy \"???\"",sep = "")),as.character(polaczone$za_adnotacje))
+                                   ifelse(nchar(polaczone$za_adnotacje)!=0,paste(polaczone$za_adnotacje,paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Znajdź frazę \"???\" i zredaguj pole",sep = ""),sep = "# "),paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Znajdź frazę \"???\" i zredaguj pole",sep = "")),as.character(polaczone$za_adnotacje))
   polaczone[,i] <- gsub("<U\\+(....)>", "???", polaczone[,i])
 }
 #zasygnalizowanie obecności znaku $ w którymś z pól
@@ -4159,7 +4194,14 @@ X <- 1:(length(polaczone)-1)
 for (i in x) {
   progress(match(i,x), max.value = length(x))
   polaczone$za_adnotacje <- ifelse(grepl("\\$",polaczone[,i]),
-                                   ifelse(nchar(polaczone$za_adnotacje)==0,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Przeredaguj treść pola.",sep = ""),paste(polaczone$za_adnotacje,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Przeredaguj treść pola.",sep = ""),sep = "# ")),as.character(polaczone$za_adnotacje))
+                                   ifelse(nchar(polaczone$za_adnotacje)==0,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Zredaguj treść pola.",sep = ""),paste(polaczone$za_adnotacje,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Zredaguj treść pola.",sep = ""),sep = "# ")),as.character(polaczone$za_adnotacje))
+}
+#zasygnalizowanie obecności frazy "character(0)" w którymś z pól
+X <- 1:(length(polaczone)-1)
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  polaczone$za_adnotacje <- ifelse(polaczone[,i]=="character(0)",
+                                   ifelse(nchar(polaczone$za_adnotacje)==0,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano frazę \"character(0)\". Zredaguj treść pola.",sep = ""),paste(polaczone$za_adnotacje,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano frazę \"character(0)\". Zredaguj treść pola.",sep = ""),sep = "# ")),as.character(polaczone$za_adnotacje))
 }
 #zasygnalizowanie obecności znaku # w opisie współtwórców
 polaczone$za_adnotacje <- ifelse(grepl("\\#",polaczone$za_opis_wspoltworcow),
@@ -4264,7 +4306,9 @@ out$pracownik[out$same == 1] <- ""
 out$za_adnotacje[out$same == 1] <- ""
 out$BN_URL[out$same == 1] <- ""
 
+#przypisanie do automatycznego OK redaktora "automat"
 out <- out %>%
+  mutate(pracownik = ifelse(rekord_BN %in% automatyczny_IOK$rekord_BN,"AUTOMAT",as.character(pracownik))) %>%
   select(1:33)
 
 #pętla zapisująca po ok. 2000 wierszy z uwzględnieniem kompletności rekordów bibliograficznych rozpisanych na kilka wierszy
@@ -4286,7 +4330,8 @@ for (i in x) {
 
 ```{r książki antologie}
 data <- bn_ok %>%
-  filter(rodzaj_ksiazki=="antologia")
+  filter(rodzaj_ksiazki=="antologia") %>%
+  mutate(redaktor_dzialu = paste(redaktor_dzialu,"_ant",sep = ""))
 #uwolnienie kolumn z danymi z bn i przetworzenie do PBL
 #1: za_uwagi, rz_nazwa, za_ro_rok, za_type, rz_rodzaj_id, tw_tworca_id, tw_nazwisko, tw_imie, dz_dzial_id, dz_nazwa, redaktor_dzialu
 pola_pbl <- data %>%
@@ -5218,7 +5263,7 @@ x <- 1:(length(polaczone)-1)
 for (i in x) {
   progress(match(i,x), max.value = length(x))
   polaczone$za_adnotacje <- ifelse(grepl("<U\\+(....)>",polaczone[,i]),
-                                   ifelse(nchar(polaczone$za_adnotacje)!=0,paste(polaczone$za_adnotacje,paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Szukaj frazy \"???\"",sep = ""),sep = "# "),paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Szukaj frazy \"???\"",sep = "")),as.character(polaczone$za_adnotacje))
+                                   ifelse(nchar(polaczone$za_adnotacje)!=0,paste(polaczone$za_adnotacje,paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Znajdź frazę \"???\" i zredaguj pole",sep = ""),sep = "# "),paste("UWAGA! Błąd kodowania w polu ",as.character(names(polaczone[i]))," Znajdź frazę \"???\" i zredaguj pole",sep = "")),as.character(polaczone$za_adnotacje))
   polaczone[,i] <- gsub("<U\\+(....)>", "???", polaczone[,i])
 }
 #zasygnalizowanie obecności znaku $ w którymś z pól
@@ -5226,7 +5271,14 @@ X <- 1:(length(polaczone)-1)
 for (i in x) {
   progress(match(i,x), max.value = length(x))
   polaczone$za_adnotacje <- ifelse(grepl("\\$",polaczone[,i]),
-                                   ifelse(nchar(polaczone$za_adnotacje)==0,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Przeredaguj treść pola.",sep = ""),paste(polaczone$za_adnotacje,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Przeredaguj treść pola.",sep = ""),sep = "# ")),as.character(polaczone$za_adnotacje))
+                                   ifelse(nchar(polaczone$za_adnotacje)==0,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Zredaguj treść pola.",sep = ""),paste(polaczone$za_adnotacje,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano znak \"$\". Zredaguj treść pola.",sep = ""),sep = "# ")),as.character(polaczone$za_adnotacje))
+}
+#zasygnalizowanie obecności frazy "character(0)" w którymś z pól
+X <- 1:(length(polaczone)-1)
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  polaczone$za_adnotacje <- ifelse(polaczone[,i]=="character(0)",
+                                   ifelse(nchar(polaczone$za_adnotacje)==0,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano frazę \"character(0)\". Zredaguj treść pola.",sep = ""),paste(polaczone$za_adnotacje,paste("UWAGA! Ze względu na błędny zapis BN w polu ",as.character(names(polaczone[i]))," wydrukowano frazę \"character(0)\". Zredaguj treść pola.",sep = ""),sep = "# ")),as.character(polaczone$za_adnotacje))
 }
 #zasygnalizowanie obecności znaku # w opisie współtwórców
 polaczone$za_adnotacje <- ifelse(grepl("\\#",polaczone$za_opis_wspoltworcow),
@@ -5331,7 +5383,9 @@ out$pracownik[out$same == 1] <- ""
 out$za_adnotacje[out$same == 1] <- ""
 out$BN_URL[out$same == 1] <- ""
 
+#przypisanie do automatycznego OK redaktora "automat"
 out <- out %>%
+  mutate(pracownik = ifelse(rekord_BN %in% automatyczny_IOK$rekord_BN,"AUTOMAT",as.character(pracownik))) %>%
   select(1:33)
 
 #pętla zapisująca po ok. 2000 wierszy z uwzględnieniem kompletności rekordów bibliograficznych rozpisanych na kilka wierszy
@@ -5351,7 +5405,14 @@ for (i in x) {
 }
 ```
 
+```{r książki współwydania}
+data <- bn_ok %>%
+  filter(rodzaj_ksiazki=="współwydanie") %>%
+  mutate(redaktor_dzialu = paste(redaktor_dzialu,"_wsp",sep = ""))
 
+
+
+```
 
 ```{r książki współwydane harlequiny}
 data <- harlequiny
