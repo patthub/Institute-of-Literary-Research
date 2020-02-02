@@ -2129,7 +2129,9 @@ for (i in x) {
 #przygotować wszystko dookoła - listy pracowników; wysłać z R od razu na dysk?
 #zrobić współwydanie
 
-
+test <- data %>%
+  select(RZ_NAZWA) %>%
+  unique()
 
 
 
@@ -2541,6 +2543,7 @@ BN_wspoltworca <- marc_field_700 %>%
 BN_wspoltworca$id_grupy <- cumsum(!duplicated(BN_wspoltworca[1:2]))
 BN_wspoltworca <- BN_wspoltworca[!duplicated(BN_wspoltworca$id_grupy),] %>%
   left_join(.,PBL_funkcje,by=c("fu_prosta"="nazwa")) %>%
+  mutate(fo_symbol = ifelse(fo_symbol=="NULL",NA,as.character(fo_symbol))) %>%
   select(ZA_UWAGI,OS_NAZWISKO,OS_IMIE,OS_OSOBA_ID,fo_symbol,fo_nazwa,funkcja)
 
 #tutaj przeszukać X245 i znaleźć błędy współtwórców
@@ -2865,7 +2868,8 @@ BN_wydawnictwo <- BN_wydawnictwo[!duplicated(BN_wydawnictwo$id_grupy),] %>%
          WY_MIASTO = ifelse(!is.na(WY_MIASTO),as.character(WY_MIASTO),as.character(miejsce_wydania)),
          rok_wydania = str_replace_all(rok_wydania, "(.*)(\\.)", "\\1"),
          za_rok_wydania = ifelse(nchar(rok_wydania)==4,as.character(rok_wydania),NA),
-         do_opisu = ifelse(is.na(za_rok_wydania),paste("[",str_extract(rok_wydania,"\\d{4}"),"]",sep = ""),"")) %>%
+         do_opisu = ifelse(is.na(za_rok_wydania),paste("[",str_extract(rok_wydania,"\\d{4}"),"]",sep = ""),""),
+         WY_MIASTO = ifelse(substr(WY_MIASTO,1,1)=="["&substr(WY_MIASTO,nchar(WY_MIASTO),nchar(WY_MIASTO))!="]"&is.na(WY_WYDAWNICTWO_ID),paste(trim(WY_MIASTO),"]",sep = ""),as.character(WY_MIASTO))) %>%
   select(ZA_UWAGI,WY_WYDAWNICTWO_ID,WY_NAZWA,WY_MIASTO,za_rok_wydania,do_opisu)
 
 #11: opis fizyczny książki
@@ -3083,7 +3087,8 @@ BN_wspoltworca <- data %>%
 BN_wydawnictwo <- data %>%
   select(ZA_UWAGI) %>%
   left_join(.,BN_wydawnictwo %>% select(ZA_UWAGI,WY_WYDAWNICTWO_ID,WY_NAZWA,WY_MIASTO,za_rok_wydania),by="ZA_UWAGI") %>%
-  ddply(., .(ZA_UWAGI), summarize, WY_WYDAWNICTWO_ID = paste(WY_WYDAWNICTWO_ID, collapse="|"), WY_NAZWA = paste(WY_NAZWA, collapse="|"), WY_MIASTO = paste(WY_MIASTO, collapse="|"), za_rok_wydania = paste(ifelse(is.na(za_rok_wydania),"",as.integer(za_rok_wydania)), collapse="|"))
+  ddply(., .(ZA_UWAGI), summarize, WY_WYDAWNICTWO_ID = paste(WY_WYDAWNICTWO_ID, collapse="|"), WY_NAZWA = paste(WY_NAZWA, collapse="|"), WY_MIASTO = paste(WY_MIASTO, collapse="|"), za_rok_wydania = paste(unique(za_rok_wydania), collapse="|")) %>%
+  mutate(za_rok_wydania = ifelse(za_rok_wydania=="NA","",as.integer(za_rok_wydania)))
 
 #połączenie wszystkich elementów w jedną tabelę
 kolejnosc <- c("ZA_UWAGI","RZ_NAZWA","ZA_RO_ROK","ZA_TYPE","RZ_RODZAJ_ID","DZ_NAZWA","DZ_DZIAL_ID","TW_TWORCA_ID","AM_AUTOR_ID","AM_NAZWISKO","AM_IMIE","ZA_TYTUL","ZA_TYTUL_ORYGINALU","ZA_JEZYK_ORYGINALU","OS_OSOBA_ID","OS_NAZWISKO","OS_IMIE","fo_symbol","za_opis_wspoltworcow","wydanie","za_tomy","instytucja","WY_WYDAWNICTWO_ID","WY_MIASTO","WY_NAZWA","za_rok_wydania","za_opis_ks","seria","TW_NAZWISKO","TW_IMIE","redaktor_dzialu","ZA_ADNOTACJE","BN_URL")
@@ -3624,6 +3629,7 @@ BN_wspoltworca <- marc_field_700 %>%
 BN_wspoltworca$id_grupy <- cumsum(!duplicated(BN_wspoltworca[1:2]))
 BN_wspoltworca <- BN_wspoltworca[!duplicated(BN_wspoltworca$id_grupy),] %>%
   left_join(.,PBL_funkcje,by=c("fu_prosta"="nazwa")) %>%
+  mutate(fo_symbol = ifelse(fo_symbol=="NULL",NA,as.character(fo_symbol))) %>%
   select(ZA_UWAGI,OS_NAZWISKO,OS_IMIE,OS_OSOBA_ID,fo_symbol,fo_nazwa,funkcja)
 
 #tutaj przeszukać X245 i znaleźć błędy współtwórców
@@ -3948,7 +3954,8 @@ BN_wydawnictwo <- BN_wydawnictwo[!duplicated(BN_wydawnictwo$id_grupy),] %>%
          WY_MIASTO = ifelse(!is.na(WY_MIASTO),as.character(WY_MIASTO),as.character(miejsce_wydania)),
          rok_wydania = str_replace_all(rok_wydania, "(.*)(\\.)", "\\1"),
          za_rok_wydania = ifelse(nchar(rok_wydania)==4,as.character(rok_wydania),NA),
-         do_opisu = ifelse(is.na(za_rok_wydania),paste("[",str_extract(rok_wydania,"\\d{4}"),"]",sep = ""),"")) %>%
+         do_opisu = ifelse(is.na(za_rok_wydania),paste("[",str_extract(rok_wydania,"\\d{4}"),"]",sep = ""),""),
+         WY_MIASTO = ifelse(substr(WY_MIASTO,1,1)=="["&substr(WY_MIASTO,nchar(WY_MIASTO),nchar(WY_MIASTO))!="]"&is.na(WY_WYDAWNICTWO_ID),paste(trim(WY_MIASTO),"]",sep = ""),as.character(WY_MIASTO))) %>%
   select(ZA_UWAGI,WY_WYDAWNICTWO_ID,WY_NAZWA,WY_MIASTO,za_rok_wydania,do_opisu)
 
 #11: opis fizyczny książki
@@ -4166,7 +4173,8 @@ BN_wspoltworca <- data %>%
 BN_wydawnictwo <- data %>%
   select(ZA_UWAGI) %>%
   left_join(.,BN_wydawnictwo %>% select(ZA_UWAGI,WY_WYDAWNICTWO_ID,WY_NAZWA,WY_MIASTO,za_rok_wydania),by="ZA_UWAGI") %>%
-  ddply(., .(ZA_UWAGI), summarize, WY_WYDAWNICTWO_ID = paste(WY_WYDAWNICTWO_ID, collapse="|"), WY_NAZWA = paste(WY_NAZWA, collapse="|"), WY_MIASTO = paste(WY_MIASTO, collapse="|"), za_rok_wydania = paste(ifelse(is.na(za_rok_wydania),"",as.integer(za_rok_wydania)), collapse="|"))
+  ddply(., .(ZA_UWAGI), summarize, WY_WYDAWNICTWO_ID = paste(WY_WYDAWNICTWO_ID, collapse="|"), WY_NAZWA = paste(WY_NAZWA, collapse="|"), WY_MIASTO = paste(WY_MIASTO, collapse="|"), za_rok_wydania = paste(unique(za_rok_wydania), collapse="|")) %>%
+  mutate(za_rok_wydania = ifelse(za_rok_wydania=="NA","",as.integer(za_rok_wydania)))
 
 #połączenie wszystkich elementów w jedną tabelę
 kolejnosc <- c("ZA_UWAGI","RZ_NAZWA","ZA_RO_ROK","ZA_TYPE","RZ_RODZAJ_ID","DZ_NAZWA","DZ_DZIAL_ID","TW_TWORCA_ID","AM_AUTOR_ID","AM_NAZWISKO","AM_IMIE","ZA_TYTUL","ZA_TYTUL_ORYGINALU","ZA_JEZYK_ORYGINALU","OS_OSOBA_ID","OS_NAZWISKO","OS_IMIE","fo_symbol","za_opis_wspoltworcow","wydanie","za_tomy","instytucja","WY_WYDAWNICTWO_ID","WY_MIASTO","WY_NAZWA","za_rok_wydania","za_opis_ks","seria","TW_NAZWISKO","TW_IMIE","redaktor_dzialu","ZA_ADNOTACJE","BN_URL")
@@ -4707,6 +4715,7 @@ BN_wspoltworca <- marc_field_700 %>%
 BN_wspoltworca$id_grupy <- cumsum(!duplicated(BN_wspoltworca[1:2]))
 BN_wspoltworca <- BN_wspoltworca[!duplicated(BN_wspoltworca$id_grupy),] %>%
   left_join(.,PBL_funkcje,by=c("fu_prosta"="nazwa")) %>%
+  mutate(fo_symbol = ifelse(fo_symbol=="NULL",NA,as.character(fo_symbol))) %>%
   select(ZA_UWAGI,OS_NAZWISKO,OS_IMIE,OS_OSOBA_ID,fo_symbol,fo_nazwa,funkcja)
 
 #tutaj przeszukać X245 i znaleźć błędy współtwórców
@@ -5031,7 +5040,8 @@ BN_wydawnictwo <- BN_wydawnictwo[!duplicated(BN_wydawnictwo$id_grupy),] %>%
          WY_MIASTO = ifelse(!is.na(WY_MIASTO),as.character(WY_MIASTO),as.character(miejsce_wydania)),
          rok_wydania = str_replace_all(rok_wydania, "(.*)(\\.)", "\\1"),
          za_rok_wydania = ifelse(nchar(rok_wydania)==4,as.character(rok_wydania),NA),
-         do_opisu = ifelse(is.na(za_rok_wydania),paste("[",str_extract(rok_wydania,"\\d{4}"),"]",sep = ""),"")) %>%
+         do_opisu = ifelse(is.na(za_rok_wydania),paste("[",str_extract(rok_wydania,"\\d{4}"),"]",sep = ""),""),
+         WY_MIASTO = ifelse(substr(WY_MIASTO,1,1)=="["&substr(WY_MIASTO,nchar(WY_MIASTO),nchar(WY_MIASTO))!="]"&is.na(WY_WYDAWNICTWO_ID),paste(trim(WY_MIASTO),"]",sep = ""),as.character(WY_MIASTO))) %>%
   select(ZA_UWAGI,WY_WYDAWNICTWO_ID,WY_NAZWA,WY_MIASTO,za_rok_wydania,do_opisu)
 
 #11: opis fizyczny książki
@@ -5245,7 +5255,8 @@ BN_wspoltworca <- data %>%
 BN_wydawnictwo <- data %>%
   select(ZA_UWAGI) %>%
   left_join(.,BN_wydawnictwo %>% select(ZA_UWAGI,WY_WYDAWNICTWO_ID,WY_NAZWA,WY_MIASTO,za_rok_wydania),by="ZA_UWAGI") %>%
-  ddply(., .(ZA_UWAGI), summarize, WY_WYDAWNICTWO_ID = paste(WY_WYDAWNICTWO_ID, collapse="|"), WY_NAZWA = paste(WY_NAZWA, collapse="|"), WY_MIASTO = paste(WY_MIASTO, collapse="|"), za_rok_wydania = paste(ifelse(is.na(za_rok_wydania),"",as.integer(za_rok_wydania)), collapse="|"))
+  ddply(., .(ZA_UWAGI), summarize, WY_WYDAWNICTWO_ID = paste(WY_WYDAWNICTWO_ID, collapse="|"), WY_NAZWA = paste(WY_NAZWA, collapse="|"), WY_MIASTO = paste(WY_MIASTO, collapse="|"), za_rok_wydania = paste(unique(za_rok_wydania), collapse="|")) %>%
+  mutate(za_rok_wydania = ifelse(za_rok_wydania=="NA","",as.integer(za_rok_wydania)))
 
 #połączenie wszystkich elementów w jedną tabelę
 kolejnosc <- c("ZA_UWAGI","RZ_NAZWA","ZA_RO_ROK","ZA_TYPE","RZ_RODZAJ_ID","DZ_NAZWA","DZ_DZIAL_ID","TW_TWORCA_ID","AM_AUTOR_ID","AM_NAZWISKO","AM_IMIE","ZA_TYTUL","ZA_TYTUL_ORYGINALU","ZA_JEZYK_ORYGINALU","OS_OSOBA_ID","OS_NAZWISKO","OS_IMIE","fo_symbol","za_opis_wspoltworcow","wydanie","za_tomy","instytucja","WY_WYDAWNICTWO_ID","WY_MIASTO","WY_NAZWA","za_rok_wydania","za_opis_ks","seria","TW_NAZWISKO","TW_IMIE","redaktor_dzialu","ZA_ADNOTACJE","BN_URL")
