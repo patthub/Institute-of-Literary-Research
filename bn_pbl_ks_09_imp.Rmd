@@ -2121,6 +2121,12 @@ for (i in x) {
   bn_ok$DZ_NAZWA[bn_ok$id==kilka_literatur_nowego_tworcy$id[i]] <- as.character(kilka_literatur_nowego_tworcy$DZ_NAZWA)[i]
   bn_ok$redaktor_dzialu[bn_ok$id==kilka_literatur_nowego_tworcy$id[i]] <- as.character(kilka_literatur_nowego_tworcy$redaktor_dzialu)[i]
 }
+#jeśli nie ma działu lub rodzaju zapisu, to wpisać id i nazwę do ustalenia
+bn_ok <- bn_ok %>%
+  mutate(DZ_DZIAL_ID =ifelse(is.na(DZ_DZIAL_ID),0,as.integer(DZ_DZIAL_ID)),
+         DZ_NAZWA = ifelse(is.na(DZ_NAZWA),"-- do ustalenia --",as.character(DZ_NAZWA)),
+         RZ_RODZAJ_ID =ifelse(is.na(RZ_RODZAJ_ID),0,as.integer(RZ_RODZAJ_ID)),
+         RZ_NAZWA = ifelse(is.na(RZ_NAZWA),"-- do ustalenia --",as.character(RZ_NAZWA)))
 
 ```
 
@@ -2129,9 +2135,8 @@ for (i in x) {
 #przygotować wszystko dookoła - listy pracowników; wysłać z R od razu na dysk?
 #zrobić współwydanie
 
-test <- data %>%
-  select(RZ_NAZWA) %>%
-  unique()
+test <- out %>%
+  filter(pracownik == "NA_podm")
 
 
 
