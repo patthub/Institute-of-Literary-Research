@@ -2139,6 +2139,10 @@ test <- out %>%
   filter(pracownik == "NA_podm")
 
 
+write.csv2(bn_ok, "C:/Users/Cezary/Desktop/2009_listy_pracowników.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+
+write.xlsx(bn_ok, "C:/Users/Cezary/Desktop/2009_listy_pracowników.xlsx",sheetName = "listy_pracownikow")
+
 
 ```
 
