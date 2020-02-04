@@ -1,0 +1,62 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+
+#biblioteki
+options(java.parameters = "-Xmx32000m")
+options(scipen = 999)
+pacman::p_load(googlesheets4,zoo,stringr,splitstackshape,plyr,dplyr,sqldf,stringdist,fuzzyjoin,data.table,svMisc,tidyverse,RJDBC,rvest,RSelenium,jsonlite,XML,viafr)
+
+#połączenie z bazą PBL
+jdbcDriver =JDBC("oracle.jdbc.OracleDriver",classPath="C:/Users/Cezary/Downloads/ojdbc6.jar")
+PBL <- dbConnect(jdbcDriver, "jdbc:oracle:thin:@//pbl.ibl.poznan.pl:1521/xe", "IBL_SELECT", "CR333444")
+
+bn_url <- dbGetQuery(PBL,
+                     "select z.za_zapis_id, z.za_url_bn
+                      from pbl_zapisy z
+                      where za_uwagi like '%2020%'
+                      and z.za_url_bn is not null") %>%
+  filter(str_detect(ZA_URL_BN, "88&"))
+
+#browser
+#list_versions("chromedriver")
+rD <- rsDriver(port=4444L,browser="chrome", chromever="79.0.3945.36")
+remDr <- rD$client
+
+x <- 1:nrow(bn_url)
+
+for (i in x) {
+  progress(match(i,x), max.value = length(x))
+  bn_url$ZA_URL_BN[i] <- str_replace(bn_url$ZA_URL_BN[i],"88&","66&")
+  page <- bn_url$ZA_URL_BN[i]
+  remDr$navigate(page)
+  Sys.sleep(1)
+  czy_blad <- remDr$findElement(using = 'css selector', "#getrecord #getrecord #getrecord .md-primoExplore-theme")
+  czy_blad <- as.character(czy_blad$getElementText())
+
+  if (length(czy_blad)==0) {
+    bn_url$ZA_URL_BN[i] <- str_replace(bn_url$ZA_URL_BN[i],"66&","06&")
+}
+}
+
+###rvest
+library(rvest)
+i <- 1
+bn_url$ZA_URL_BN[i] <- str_replace(bn_url$ZA_URL_BN[i],"88&","66&")
+page <- bn_url$ZA_URL_BN[i]
+art_webpage <- read_html(page)
+czy_blad <- html_nodes(art_webpage, ".fan-img-1")
+                         
+#wydobywanie informacji: tytuł
+art_tytul <- html_nodes(art_webpage, "#articleTitle h3")
+art_tytul <- html_text(art_tytul)
+art_tytul <- paste(art_tytul, collapse = "")
+
+
+
+```
+
