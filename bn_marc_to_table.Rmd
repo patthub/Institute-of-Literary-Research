@@ -10,22 +10,24 @@ output:
 2. Marc tools -> MarcBreaker and change from .mrc to .mrk; set default character encoding to UTF-8 (30 seconds per a text file that can be uploaded to R)
 3. For loop in R (need to divide for a smaller parts)
 
+
 ```{r BN marc processing to table}
 options(java.parameters = "-Xmx32000m")
 options(scipen = 999)
 pacman::p_load(plyr,stringr,tidyverse,reshape2,zoo,sqldf,splitstackshape,dplyr,svMisc,googlesheets4)
+`%notin%` <- Negate(`%in%`)
 
-#1
-data_full <- data.frame()
-x <- 1:11
-i <- 1
+# przetwarzanie BN
+data_full <- data.frame(stringsAsFactors = FALSE)
+x <- 1:34
+
 #download database in pieces
 for (i in x) {
 progress(match(i,x), max.value = length(x))
 b <- sprintf("%02d", i-1)
-path1 <- "C:/Users/User/Desktop/bn_all_30.10.2019/msplit000000"
+path1 <- "C:/Users/User/Desktop/bn_all/msplit000000"
 path2 <- b
-path3 <- ".mrk"
+path3 <- ".mrk8"
 path <- paste(path1,path2,path3,sep = "")
 bn1 <- readLines(path, encoding = "UTF-8")
 data1 <- data.frame(bn1)
@@ -41,163 +43,51 @@ data1 <- data1 %>%
   fill(id,.direction = "up") %>%
   ungroup() %>%
   ##wydobycie danych dla konkretnego roku ========== trzeba ręcznie zdefiniować rok
-  #mutate(rok = ifelse(grepl("^\\=008",bn1),str_sub(bn1,14,17),NA)) %>%
-  #group_by(row) %>%
-  #fill(rok) %>%
-  #fill(rok,.direction = "up") %>%
-  #ungroup() %>%
-  #filter(rok == 2019) %>%#TUTAJ
-  #select(-rok) %>%
-  select(-2,-3) %>%
-  mutate(field = str_replace_all(bn1, "(=)(\\w{3})(.*)", "\\2"),
-         content = str_replace_all(bn1,"(=)(\\w{3})(\\s{2})(.*)","\\4")) %>%
-  select(2,3,4) %>%
-  mutate(id_field = paste(id,field,sep = "|"))
-
-count <- data1 %>%
-  select(4,3)
-count <- as.data.frame(table(count$id_field))
-data1 <- merge(x=data1,y=count, by.x = "id_field", by.y = "Var1")
-remove(count)
-data1_to_join <- data1 %>%
-  filter(Freq > 1)
-data1_to_join <- ddply(data1_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
-data1_to_join <- mutate(data1_to_join,
-                        id = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\1"),
-                        field = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\3"))
-data1_ok <- data1 %>%
-  filter(Freq == 1) %>%
-  select(-5) %>%
-  select(1,4,2,3)
-data1 <- rbind(data1_ok,data1_to_join)
-remove(data1_ok)
-remove(data1_to_join)
-data1 <- data1[order(as.character(data1$id_field)),]
-data1 <- data1 %>%
-  select(3,4,2)
-data_full <- rbind(data_full,data1)
-
-}
-
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_1.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
-
-#2
-data_full <- data.frame()
-
-x <- 12:22
-
-#download database in pieces
-for (i in x) {
-progress(match(i,x), max.value = length(x))
-b <- sprintf("%02d", i-1)
-path1 <- "C:/Users/User/Desktop/bn_all_30.10.2019/msplit000000"
-path2 <- b
-path3 <- ".mrk"
-path <- paste(path1,path2,path3,sep = "")
-bn1 <- readLines(path, encoding = "UTF-8")
-data1 <- data.frame(bn1)
-remove(bn1)
-data1 <- data1 %>%
-  mutate(czy = grepl("^\\=LDR",bn1),
-         row = ifelse(grepl("^\\=LDR",bn1),seq.int(nrow(data1)),NA)) %>%
-  filter(bn1!="") %>%
-  fill(row) %>%
-  mutate(id = ifelse(grepl("^\\=009",bn1),str_replace_all(bn1,"(^\\=009 .*?\\w)(.*?)($)","\\2"),NA)) %>%
+  mutate(rok = ifelse(grepl("^\\=008",bn1),str_sub(bn1,14,17),NA)) %>%
   group_by(row) %>%
-  fill(id) %>%
-  fill(id,.direction = "up") %>%
+  fill(rok) %>%
+  fill(rok,.direction = "up") %>%
   ungroup() %>%
+  filter(rok == 2010) %>%#TUTAJ
+  select(-rok) %>%
   select(-2,-3) %>%
   mutate(field = str_replace_all(bn1, "(=)(\\w{3})(.*)", "\\2"),
          content = str_replace_all(bn1,"(=)(\\w{3})(\\s{2})(.*)","\\4")) %>%
   select(2,3,4) %>%
   mutate(id_field = paste(id,field,sep = "|"))
+if (nrow(data1)>0) {
+  count <- data1 %>%
+    select(4,3)
+  count <- as.data.frame(table(count$id_field))
+  data1 <- data1 %>%
+    left_join(.,count,by=c("id_field"="Var1"))
+  remove(count)
+  
+  data1_to_join <- data1 %>%
+    filter(Freq > 1) %>%
+    group_by(id_field) %>%
+    mutate(content = paste(content, collapse="|")) %>%
+    ungroup() %>%
+    unique() %>%
+    mutate(id = str_replace_all(id_field,"(.*)(\\|)(.*)", "\\1"),
+           field = str_replace_all(id_field,"(.*)(\\|)(.*)", "\\3")) %>%
+    select(-Freq)
 
-count <- data1 %>%
-  select(4,3)
-count <- as.data.frame(table(count$id_field))
-data1 <- merge(x=data1,y=count, by.x = "id_field", by.y = "Var1")
-remove(count)
-data1_to_join <- data1 %>%
-  filter(Freq > 1)
-data1_to_join <- ddply(data1_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
-data1_to_join <- mutate(data1_to_join,
-                        id = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\1"),
-                        field = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\3"))
-data1_ok <- data1 %>%
-  filter(Freq == 1) %>%
-  select(-5) %>%
-  select(1,4,2,3)
-data1 <- rbind(data1_ok,data1_to_join)
-remove(data1_ok)
-remove(data1_to_join)
-data1 <- data1[order(as.character(data1$id_field)),]
-data1 <- data1 %>%
-  select(3,4,2)
-data_full <- rbind(data_full,data1)
+  data1 <- data1 %>%
+    filter(id_field %notin% data1_to_join$id_field) %>%
+    bind_rows(.,data1_to_join) %>%
+    arrange(id_field,field) %>%
+    select(1,2,3)
 
+  remove(data1_ok)
+  remove(data1_to_join)
+
+  data_full <- data_full %>%
+    bind_rows(.,data1)
+} 
 }
-
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_2.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
-
-#3
-data_full <- data.frame()
-
-x <- 23:34
-
-#download database in pieces
-for (i in x) {
-progress(match(i,x), max.value = length(x))
-b <- sprintf("%02d", i-1)
-path1 <- "C:/Users/User/Desktop/bn_all_30.10.2019/msplit000000"
-path2 <- b
-path3 <- ".mrk"
-path <- paste(path1,path2,path3,sep = "")
-bn1 <- readLines(path, encoding = "UTF-8")
-data1 <- data.frame(bn1)
-remove(bn1)
-data1 <- data1 %>%
-  mutate(czy = grepl("^\\=LDR",bn1),
-         row = ifelse(grepl("^\\=LDR",bn1),seq.int(nrow(data1)),NA)) %>%
-  filter(bn1!="") %>%
-  fill(row) %>%
-  mutate(id = ifelse(grepl("^\\=009",bn1),str_replace_all(bn1,"(^\\=009 .*?\\w)(.*?)($)","\\2"),NA)) %>%
-  group_by(row) %>%
-  fill(id) %>%
-  fill(id,.direction = "up") %>%
-  ungroup() %>%
-  select(-2,-3) %>%
-  mutate(field = str_replace_all(bn1, "(=)(\\w{3})(.*)", "\\2"),
-         content = str_replace_all(bn1,"(=)(\\w{3})(\\s{2})(.*)","\\4")) %>%
-  select(2,3,4) %>%
-  mutate(id_field = paste(id,field,sep = "|"))
-
-count <- data1 %>%
-  select(4,3)
-count <- as.data.frame(table(count$id_field))
-data1 <- merge(x=data1,y=count, by.x = "id_field", by.y = "Var1")
-remove(count)
-data1_to_join <- data1 %>%
-  filter(Freq > 1)
-data1_to_join <- ddply(data1_to_join, .(id_field), summarize, content = paste(content, collapse="|"))
-data1_to_join <- mutate(data1_to_join,
-                        id = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\1"),
-                        field = str_replace_all(data1_to_join$id_field,"(.*)(\\|)(.*)", "\\3"))
-data1_ok <- data1 %>%
-  filter(Freq == 1) %>%
-  select(-5) %>%
-  select(1,4,2,3)
-data1 <- rbind(data1_ok,data1_to_join)
-remove(data1_ok)
-remove(data1_to_join)
-data1 <- data1[order(as.character(data1$id_field)),]
-data1 <- data1 %>%
-  select(3,4,2)
-data_full <- rbind(data_full,data1)
-
-}
-
-write.csv2(data_full, file = "C:/Users/User/Desktop/bn_all_3.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
+data_full_table <- dcast(data_full, id ~ field, value.var="content")
+write.csv2(data_full_table, file = "C:/Users/User/Desktop/bn_books_2010.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 
 ```
 
