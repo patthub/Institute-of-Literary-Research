@@ -502,6 +502,15 @@ bn_ok <- sqldf("select *
                from bn_ok a
                where a.id not in (select b.id from nie_poloniki b)") %>%
   select(-czy_polonik)
+
+#usunięcie książek zabawek, do kolorowania, dla małych dzieci, z naklejkami, które nie mają żadnego deskryptora gatunkowego
+ks_zabawki <- bn_ok %>% 
+  filter((str_count(X655,"\\$a")==1&grepl("Książka zabawka|Książki dla małych dzieci|Książka do kolorowania|Książka z naklejkami|Książki dla przedszkolaków|Wydawnictwa dla dzieci",X655))|str_count(X655,"\\$a")==2&grepl("Książka obrazkowa",X655)&grepl("Książki dla małych dzieci",X655)|str_count(X655,"\\$a")==2&grepl("Książka do kolorowania",X655)&grepl("Publikacje dla dzieci",X655)|str_count(X655,"\\$a")==2&grepl("Książki zabawki",X655)&grepl("Wycinanki",X655)|str_count(X655,"\\$a")==2&grepl("Książki dla małych dzieci",X655)&grepl("Publikacje dla dzieci",X655))
+
+bn_ok <- sqldf("select *
+               from bn_ok a
+               where a.id not in (select b.id from ks_zabawki b)")
+
 ```
 
 ```{r automatyczne usunięcie INO na podstawie wcześniejszych importów}
@@ -637,24 +646,58 @@ reszta <- sqldf("select *
 blabla <- bn_ok
 bn_ok <- blabla
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 test2 <- bn_ok %>%
   mutate(czy_ma_ukd = ifelse(X080=="","nie","tak"),
          position_dash = ifelse(grepl("(\\\\\\\\\\$a|:)(821\\.)",X080),str_locate(X080,"\\-")[,1], NA),
          position_dash = ifelse(is.na(position_dash),"",as.integer(position_dash)),
          position_091 = str_locate(X080,"\\(091\\)")[,1],
          position_091 = ifelse(is.na(position_091),"",as.integer(position_091)),
-         rodzaj_ksiazki = ifelse(grepl("Antologi",X655),"antologia",
+         rodzaj_ksiazki = ifelse(grepl("antologi|przysłowia|cytaty",X655,ignore.case = TRUE),"antologia",
                                  ifelse(position_091!=""&position_dash!="",
                           ifelse(as.integer(position_091)<as.integer(position_dash), "przedmiotowa", "podmiotowa"),
                           ifelse(position_dash!="","podmiotowa","przedmiotowa"))),
-         rodzaj_ksiazki = ifelse(czy_ma_ukd=="nie","",as.character(rodzaj_ksiazki)))
+         rodzaj_ksiazki = ifelse(czy_ma_ukd=="nie","",as.character(rodzaj_ksiazki)),
+         rodzaj_ksiazki = ifelse(grepl("82-93",X080),"podmiotowa",as.character(rodzaj_ksiazki)))
+
+rekordy_podmiotowe_stare <- dbGetQuery(PBL,
+                                       "select z.za_zapis_id
+                                        from pbl_zapisy z
+                                        join IBL_OWNER.pbl_rodzaje_zapisow rz on rz.rz_rodzaj_id=z.za_rz_rodzaj1_id
+                                        where rz.rz_rodzaj_id=1
+                                        and z.za_uwagi like '%import%'")
+
+gatunki_poprzednie_imp <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,listy_2008) %>% 
+  filter(ZA_ZAPIS_ID %in% rekordy_podmiotowe_stare$ZA_ZAPIS_ID) %>% 
+  mutate(X655 = ifelse(rok==2004,str_remove_all(str_replace_all(X655,"(\\$a)","\\\\#7\\1"),"#"),as.character(X655))) %>% 
+  select(X655) %>% 
+  unique()
+
 gatunki_podmiotowe <- test2 %>%
   filter(rodzaj_ksiazki=="podmiotowa") %>%
   select(X655) %>%
+  bind_rows(.,gatunki_poprzednie_imp) %>% 
   unique() %>%
   cSplit(.,"X655",sep = "|",direction = "long") %>%
   unique() %>%
-  filter(str_detect(X655,"\\$y[\\d-]+ w\\."))
+  filter(!grepl("xhistoria|xtematyka|xbiografia",X655)) %>% 
+  filter(str_detect(X655,"\\$y[\\d-]+ w\\.")) %>% 
+  #mutate(X655 = str_replace(X655, "(?<= )(\\S+)(\\$y)(.*?$)", "[\\\\S]+\\2")) %>% 
+  mutate(X655 = str_replace(X655, "(?<= )(\\S+)(\\$y)(.*?$)", ".+\\2")) %>% 
+  unique()
+
 gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
 test2$czy_podmiotowy <- grepl(gatunki_podmiotowe,test2$X655)|grepl(gatunki_podmiotowe,test2$X650)
 test2 <- test2 %>%
@@ -666,48 +709,61 @@ test2 <- test2 %>%
                                                              ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN")&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
                                                                     ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))),
          rodzaj_ksiazki = ifelse(rodzaj_ksiazki=="","przedmiotowa",as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X490)|grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X830),"przedmiotowa",as.character(rodzaj_ksiazki)),
+         rodzaj_ksiazki = ifelse(grepl("Lektury Wszech Czasów \\: streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X490)|grepl("Lektury Wszech Czasów \\: streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X830),"przedmiotowa",as.character(rodzaj_ksiazki)),
+         rodzaj_ksiazki = ifelse(grepl("aLektura z Opracowaniem - Zielona Sowa|aLektura \\(Greg\\)|aLektura Dobrze Opracowana|aLektura z Opracowaniem - Ibis",X830),"podmiotowa",as.character(rodzaj_ksiazki)),
          ilu_tworcow = str_count(X100,"\\$a"),
          rodzaj_ksiazki = ifelse(ilu_tworcow>4&rodzaj_ksiazki=="podmiotowa","antologia",as.character(rodzaj_ksiazki)),
          rodzaj_ksiazki = ifelse(grepl("Legendy",X655),"antologia",as.character(rodzaj_ksiazki))) %>%
   select(1:30,rodzaj_ksiazki)
 
-test <- bn_ok %>%
-  mutate(rodzaj_ksiazki = ifelse(!is.na(osoba_bn_autor), "podmiotowa", ""),
-         czy_ma_ukd = ifelse(X080=="","nie","tak"),
-         position_dash = ifelse(grepl("(\\\\\\\\\\$a|:)(821\\.)",X080),str_locate(X080,"\\-")[,1], NA),
-         position_dash = ifelse(is.na(position_dash),"",as.integer(position_dash)),
-         position_091 = str_locate(X080,"\\(091\\)")[,1],
-         position_091 = ifelse(is.na(position_091),"",as.integer(position_091)),
-         rodzaj_ksiazki = ifelse(grepl("antologi",X655,ignore.case = TRUE)|grepl("antologi", X245, ignore.case = TRUE),"antologia",
-                                 ifelse(position_091!=""&position_dash!="",
-                          ifelse(as.integer(position_091)<as.integer(position_dash), "przedmiotowa", "podmiotowa"),
-                          ifelse(position_dash!="","podmiotowa",as.character(rodzaj_ksiazki)))),
-         rodzaj_ksiazki = ifelse(rodzaj_ksiazki == "", "przedmiotowa", as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(czy_ma_ukd=="nie","",as.character(rodzaj_ksiazki)))
-gatunki_podmiotowe <- test %>%
-  filter(rodzaj_ksiazki=="podmiotowa") %>%
-  select(X655) %>%
-  unique() %>%
-  cSplit(.,"X655",sep = "|",direction = "long") %>%
-  unique() %>%
-  filter(str_detect(X655,"\\$y[\\d-]+ w\\."))
-gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
-test$czy_podmiotowy <- grepl(gatunki_podmiotowe,test$X655)|grepl(gatunki_podmiotowe,test$X650)
-test <- test %>%
-  mutate(rodzaj_ksiazki = ifelse(str_count(X245, " / ")+1>2,"antologia",
-                                 ifelse(str_count(X245, " / ")+1==2,"współwydanie",
-                                        ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                               ifelse(X100!=""&grepl("aPamiętnik|aLiteratura podróżnicza",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                                      ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                                             ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN")&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                                                    ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))),
-         rodzaj_ksiazki = ifelse(rodzaj_ksiazki=="","przedmiotowa",as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X490)|grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X830),"przedmiotowa",as.character(rodzaj_ksiazki)),
-         ilu_tworcow = str_count(X100,"\\$a"),
-         rodzaj_ksiazki = ifelse(ilu_tworcow>4&rodzaj_ksiazki=="podmiotowa","antologia",as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(grepl("Legendy",X655),"antologia",as.character(rodzaj_ksiazki))) %>%
-  select(1:30,rodzaj_ksiazki)
+
+# przypisania do podmiotowej na podstawie smierci przed 1700
+marc_field_100 <- test2 %>%
+  filter(!is.na(osoba_bn_autor)) %>%
+  select(id,X100)%>%
+  filter(!grepl("\\|", X100)) %>% 
+  filter(X100!="") %>%
+  mutate(X100=str_replace_all(X100,"(^|\\|)","~\\1")) %>%
+  cSplit(.,"X100",sep = "~",direction = "long") %>%
+  filter(X100!="") %>%
+  mutate(X100=str_remove_all(X100,"^\\|")) %>%
+  mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
+subfield_list<- str_extract_all(test2$X100,"\\$.")
+subfield_list<- unique(unlist(subfield_list))
+empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
+colnames(empty_table) <-subfield_list
+marc_field_100<-cbind(marc_field_100,empty_table)
+subfield_list_char <- paste("(",subfield_list,")",sep = "")
+subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
+
+x <- 1:length(subfield_list)
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  marc_field_100$X100 <- str_replace(marc_field_100$X100,subfield_list_char[i],"|\\1")
+}
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
+  string_a <- "(^)(.*?\\|"
+  string_b <- subfield_list_char2[i]
+  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
+  string <- paste(string_a,string_b,string_c,sep = "")
+  marc_field_100[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_100$X100),str_replace_all(gsub(string,"\\3",marc_field_100$X100),"\\${2}.", "~"),NA)
+}
+
+marc_field_100 <- marc_field_100 %>% 
+  filter(!is.na(`$d`) & str_extract(`$d`, "\\d+(?!.*\\d+)") < 1700)
+
+test2 <- test2 %>% 
+  mutate(rodzaj_ksiazki = ifelse(id %in% marc_field_100$id, "podmiotowa", as.character(rodzaj_ksiazki)))
+
+
+
+
+
+
+
+
 
 x <- 1:nrow(test)
 for (i in x) {
