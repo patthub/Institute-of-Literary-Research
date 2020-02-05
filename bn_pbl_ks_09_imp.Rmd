@@ -3288,6 +3288,8 @@ polaczone <- data %>%
   left_join(.,BN_URL,by = "ZA_UWAGI") %>%
   select(noquote(kolejnosc))
 colnames(polaczone) <- c("rekord_BN","rz_nazwa","za_ro_rok","za_type","rz_rodzaj_id","DZ_NAZWA","DZ_DZIAL_ID","tw_tworca_id","am_autor_id","am_nazwisko","am_imie","za_tytul","za_tytul_oryginalu","za_jezyk_oryginalu","os_osoba_id","os_nazwisko","os_imie","fo_symbol","za_opis_wspoltworcow","za_wydanie","za_tomy","za_instytucja","wy_wydawnictwo_id","wy_miejsce","wy_nazwa","za_rok_wydania","za_opis_fizyczny_ksiazki","za_seria_wydawnicza","tw_nazwisko","tw_imie","pracownik","za_adnotacje","BN_URL")
+polaczone <- polaczone %>% 
+  mutate(rekord_BN = paste(za_ro_rok,sprintf("%05d", as.integer(rekord_BN)),sep = "_"))
 
 #zasygnalizowanie niepoprawnego kodowania
 x <- 1:(length(polaczone)-2)
@@ -4374,6 +4376,8 @@ polaczone <- data %>%
   left_join(.,BN_URL,by = "ZA_UWAGI") %>%
   select(noquote(kolejnosc))
 colnames(polaczone) <- c("rekord_BN","rz_nazwa","za_ro_rok","za_type","rz_rodzaj_id","DZ_NAZWA","DZ_DZIAL_ID","tw_tworca_id","am_autor_id","am_nazwisko","am_imie","za_tytul","za_tytul_oryginalu","za_jezyk_oryginalu","os_osoba_id","os_nazwisko","os_imie","fo_symbol","za_opis_wspoltworcow","za_wydanie","za_tomy","za_instytucja","wy_wydawnictwo_id","wy_miejsce","wy_nazwa","za_rok_wydania","za_opis_fizyczny_ksiazki","za_seria_wydawnicza","tw_nazwisko","tw_imie","pracownik","za_adnotacje","BN_URL")
+polaczone <- polaczone %>% 
+  mutate(rekord_BN = paste(za_ro_rok,sprintf("%05d", as.integer(rekord_BN)),sep = "_"))
 
 #zasygnalizowanie niepoprawnego kodowania
 x <- 1:(length(polaczone)-2)
@@ -5456,6 +5460,8 @@ polaczone <- data %>%
   left_join(.,BN_URL,by = "ZA_UWAGI") %>%
   select(noquote(kolejnosc))
 colnames(polaczone) <- c("rekord_BN","rz_nazwa","za_ro_rok","za_type","rz_rodzaj_id","DZ_NAZWA","DZ_DZIAL_ID","tw_tworca_id","am_autor_id","am_nazwisko","am_imie","za_tytul","za_tytul_oryginalu","za_jezyk_oryginalu","os_osoba_id","os_nazwisko","os_imie","fo_symbol","za_opis_wspoltworcow","za_wydanie","za_tomy","za_instytucja","wy_wydawnictwo_id","wy_miejsce","wy_nazwa","za_rok_wydania","za_opis_fizyczny_ksiazki","za_seria_wydawnicza","tw_nazwisko","tw_imie","pracownik","za_adnotacje","BN_URL")
+polaczone <- polaczone %>% 
+  mutate(rekord_BN = paste(za_ro_rok,sprintf("%05d", as.integer(rekord_BN)),sep = "_"))
 
 #zasygnalizowanie niepoprawnego kodowania
 x <- 1:(length(polaczone)-2)
