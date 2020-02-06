@@ -301,7 +301,7 @@ bn_ks <- bn_ks %>%
 
 #wspomnienia,pamiętniki,literatura podróżnicza,reportaż
 wspomnienia <- bn_ks %>%
-  mutate(czy_wspomnienia_reportaz = ifelse(str_detect(X655,"Pamiętniki i wspomnienia")|str_detect(X655,"Literatura podróżnicza")|str_detect(X655,"Pamiętniki")|str_detect(X655,"Reportaż"),"tak",NA)) %>%
+  mutate(czy_wspomnienia_reportaz = ifelse(str_detect(X655,"Pamiętniki i wspomnienia")|str_detect(X655,"Literatura podróżnicza")|str_detect(X655,"Pamiętniki")|str_detect(X655,"Reportaż")|str_detect(X655,"Relacja z podróży"),"tak",NA)) %>%
   select(id,czy_wspomnienia_reportaz) %>%
   unique()
 bn_ks <- bn_ks %>%
@@ -371,10 +371,21 @@ distance1 <- merge(distance1,count,by.x = "porownanie",by.y = "Var1",all.x = TRU
   select(porownanie,Freq,2:155) %>%
   arrange(-Freq,porownanie) %>%
   select(porownanie,Freq,id) %>%
-  cSplit(.,"porownanie",sep = "|",direction = "wide")
+  cSplit(.,"porownanie",sep = "|",direction = "wide") %>% 
+  arrange(porownanie_2,porownanie_3,porownanie_1,-Freq,id)
+count <- as.data.frame(table(distance1$porownanie_2,distance1$porownanie_3)) %>% 
+  filter(Freq>0)
+distance1 <- distance1 %>% 
+  left_join(.,count,by=c("porownanie_2"="Var1","porownanie_3"="Var2")) %>% 
+  arrange(porownanie_2,porownanie_3,-Freq.y,porownanie_1,-Freq.y,id) %>% 
+  group_by_at(vars(4:6)) %>% 
+  fill(porownanie_1) %>% 
+  ungroup() %>% 
+  unique() %>% 
+  select(-Freq.y) %>% 
+  rename(Freq = Freq.x)
 
 #poszukanie dystansu Levenshteina == 1 przy takim samym ISBN
-
 distance2 <- distance1 %>%
   filter(!is.na(porownanie_1)) %>%
   group_by(porownanie_1) %>%
@@ -407,8 +418,10 @@ for (i in x) {
   permutations <- rbind(permutations,iteration)
 }
 
+#permutations <- permutations %>%
+#  filter(distance==1)
 permutations <- permutations %>%
-  filter(distance==1)
+  filter(distance<1)
 
 distance2 <- distance2 %>%
   filter(id_grupy %in% permutations$id_grupy) %>%
@@ -642,35 +655,57 @@ reszta <- sqldf("select *
                (select b.id
                from bn_ok b)")
 ```
-```{r testowe przypisanie rodzaju ksiazki}
-blabla <- bn_ok
-bn_ok <- blabla
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-test2 <- bn_ok %>%
+```{r przypisanie książce rodzaju (podmiotowa, przedmiotowa, antologie, współwydanie)}
+stare_rodzajowanie <- bn_ok %>%
   mutate(czy_ma_ukd = ifelse(X080=="","nie","tak"),
          position_dash = ifelse(grepl("(\\\\\\\\\\$a|:)(821\\.)",X080),str_locate(X080,"\\-")[,1], NA),
          position_dash = ifelse(is.na(position_dash),"",as.integer(position_dash)),
          position_091 = str_locate(X080,"\\(091\\)")[,1],
          position_091 = ifelse(is.na(position_091),"",as.integer(position_091)),
-         rodzaj_ksiazki = ifelse(grepl("antologi|przysłowia|cytaty",X655,ignore.case = TRUE),"antologia",
+         rodzaj_ksiazki = ifelse(grepl("Antologi",X655),"antologia",
+                                 ifelse(position_091!=""&position_dash!="",
+                          ifelse(as.integer(position_091)<as.integer(position_dash), "przedmiotowa", "podmiotowa"),
+                          ifelse(position_dash!="","podmiotowa","przedmiotowa"))),
+         rodzaj_ksiazki = ifelse(czy_ma_ukd=="nie","",as.character(rodzaj_ksiazki)))
+gatunki_podmiotowe <- stare_rodzajowanie %>%
+  filter(rodzaj_ksiazki=="podmiotowa") %>%
+  select(X655) %>%
+  unique() %>%
+  cSplit(.,"X655",sep = "|",direction = "long") %>%
+  unique() %>%
+  filter(str_detect(X655,"\\$y[\\d-]+ w\\."))
+gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
+stare_rodzajowanie$czy_podmiotowy <- grepl(gatunki_podmiotowe,stare_rodzajowanie$X655)|grepl(gatunki_podmiotowe,stare_rodzajowanie$X650)
+stare_rodzajowanie <- stare_rodzajowanie %>%
+  mutate(rodzaj_ksiazki = ifelse(str_count(X245, " / ")+1>2,"antologia",
+                                 ifelse(str_count(X245, " / ")+1==2,"współwydanie",
+                                        ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
+                                               ifelse(X100!=""&grepl("aPamiętnik|aLiteratura podróżnicza",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
+                                                      ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
+                                                             ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN")&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
+                                                                    ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))),
+         rodzaj_ksiazki = ifelse(rodzaj_ksiazki=="","przedmiotowa",as.character(rodzaj_ksiazki)),
+         rodzaj_ksiazki = ifelse(grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X490)|grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X830),"przedmiotowa",as.character(rodzaj_ksiazki)),
+         ilu_tworcow = str_count(X100,"\\$a"),
+         rodzaj_ksiazki = ifelse(ilu_tworcow>4&rodzaj_ksiazki=="podmiotowa","antologia",as.character(rodzaj_ksiazki)),
+         rodzaj_ksiazki = ifelse(grepl("Legendy",X655),"antologia",as.character(rodzaj_ksiazki))) %>%
+  filter(grepl("katalog wystawy",X655,ignore.case = TRUE)&rodzaj_ksiazki=="przedmiotowa") %>% 
+  select(id)
+
+##właściwe rodzajowanie z uwaględnieniem jednego elementu ze starego rodzajowania
+bn_ok <- bn_ok %>%
+  mutate(czy_ma_ukd = ifelse(X080=="","nie","tak"),
+         position_dash = ifelse(grepl("(\\\\\\\\\\$a|:)(821\\.)",X080),str_locate(X080,"\\-")[,1], NA),
+         position_dash = ifelse(is.na(position_dash),"",as.integer(position_dash)),
+         position_091 = str_locate(X080,"\\(091\\)")[,1],
+         position_091 = ifelse(is.na(position_091),"",as.integer(position_091)),
+         rodzaj_ksiazki = ifelse(grepl("antologi|Przysłowia [\\S]+\\$2|Cytaty\\$2",X655,ignore.case = TRUE),"antologia",
                                  ifelse(position_091!=""&position_dash!="",
                           ifelse(as.integer(position_091)<as.integer(position_dash), "przedmiotowa", "podmiotowa"),
                           ifelse(position_dash!="","podmiotowa","przedmiotowa"))),
          rodzaj_ksiazki = ifelse(czy_ma_ukd=="nie","",as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(grepl("82-93",X080),"podmiotowa",as.character(rodzaj_ksiazki)))
+         rodzaj_ksiazki = ifelse(grepl("82-93",X080)&rodzaj_ksiazki!="antologia","podmiotowa",as.character(rodzaj_ksiazki)))
 
 rekordy_podmiotowe_stare <- dbGetQuery(PBL,
                                        "select z.za_zapis_id
@@ -685,7 +720,7 @@ gatunki_poprzednie_imp <- rbind(listy_2004,listy_2005,listy_2006,listy_2007,list
   select(X655) %>% 
   unique()
 
-gatunki_podmiotowe <- test2 %>%
+gatunki_podmiotowe <- bn_ok %>%
   filter(rodzaj_ksiazki=="podmiotowa") %>%
   select(X655) %>%
   bind_rows(.,gatunki_poprzednie_imp) %>% 
@@ -699,8 +734,8 @@ gatunki_podmiotowe <- test2 %>%
   unique()
 
 gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
-test2$czy_podmiotowy <- grepl(gatunki_podmiotowe,test2$X655)|grepl(gatunki_podmiotowe,test2$X650)
-test2 <- test2 %>%
+bn_ok$czy_podmiotowy <- grepl(gatunki_podmiotowe,bn_ok$X655)|grepl(gatunki_podmiotowe,bn_ok$X650)
+bn_ok <- bn_ok %>%
   mutate(rodzaj_ksiazki = ifelse(str_count(X245, " / ")+1>2,"antologia",
                                  ifelse(str_count(X245, " / ")+1==2,"współwydanie",
                                         ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
@@ -713,12 +748,12 @@ test2 <- test2 %>%
          rodzaj_ksiazki = ifelse(grepl("aLektura z Opracowaniem - Zielona Sowa|aLektura \\(Greg\\)|aLektura Dobrze Opracowana|aLektura z Opracowaniem - Ibis",X830),"podmiotowa",as.character(rodzaj_ksiazki)),
          ilu_tworcow = str_count(X100,"\\$a"),
          rodzaj_ksiazki = ifelse(ilu_tworcow>4&rodzaj_ksiazki=="podmiotowa","antologia",as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(grepl("Legendy",X655),"antologia",as.character(rodzaj_ksiazki))) %>%
+         rodzaj_ksiazki = ifelse(grepl("Legendy|\\$vantologi",X655),"antologia",as.character(rodzaj_ksiazki))) %>%
   select(1:30,rodzaj_ksiazki)
 
 
 # przypisania do podmiotowej na podstawie smierci przed 1700
-marc_field_100 <- test2 %>%
+marc_field_100 <- bn_ok %>%
   filter(!is.na(osoba_bn_autor)) %>%
   select(id,X100)%>%
   filter(!grepl("\\|", X100)) %>% 
@@ -728,7 +763,7 @@ marc_field_100 <- test2 %>%
   filter(X100!="") %>%
   mutate(X100=str_remove_all(X100,"^\\|")) %>%
   mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(test2$X100,"\\$.")
+subfield_list<- str_extract_all(bn_ok$X100,"\\$.")
 subfield_list<- unique(unlist(subfield_list))
 empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_100)[1]))
 colnames(empty_table) <-subfield_list
@@ -754,89 +789,10 @@ for (i in x) {
 marc_field_100 <- marc_field_100 %>% 
   filter(!is.na(`$d`) & str_extract(`$d`, "\\d+(?!.*\\d+)") < 1700)
 
-test2 <- test2 %>% 
-  mutate(rodzaj_ksiazki = ifelse(id %in% marc_field_100$id, "podmiotowa", as.character(rodzaj_ksiazki)))
-
-
-
-
-
-
-
-
-
-x <- 1:nrow(test)
-for (i in x) {
-  progress(match(i,x), max.value = length(x))
-  test$czy_to_samo[i] <- test$rodzaj_ksiazki[i] == test2$rodzaj_ksiazki[i]
-}
-
-test <- test %>%
-  filter(czy_to_samo==FALSE)
-
-
-gatunki_podmiotowe <- bn_ok %>%
-  filter(rodzaj_ksiazki=="podmiotowa") %>%
-  select(X655) %>%
-  unique() %>%
-  cSplit(.,"X655",sep = "|",direction = "long") %>%
-  unique() %>%
-  filter(str_detect(X655,"\\$y[\\d-]+ w\\."))
-gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
-bn_ok$czy_podmiotowy <- grepl(gatunki_podmiotowe,bn_ok$X655)|grepl(gatunki_podmiotowe,bn_ok$X650)
-bn_ok <- bn_ok %>%
-  mutate(rodzaj_ksiazki = ifelse(str_count(X245, " / ")+1>2,"antologia",
-                                 ifelse(str_count(X245, " / ")+1==2,"współwydanie",
-                                        ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                               ifelse(X100!=""&grepl("aPamiętnik|aLiteratura podróżnicza",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                                      ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                                             ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN")&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                                                    ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))),
-         rodzaj_ksiazki = ifelse(rodzaj_ksiazki=="","przedmiotowa",as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X490)|grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X830),"przedmiotowa",as.character(rodzaj_ksiazki)),
-         ilu_tworcow = str_count(X100,"\\$a"),
-         rodzaj_ksiazki = ifelse(ilu_tworcow>4&rodzaj_ksiazki=="podmiotowa","antologia",as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(grepl("Legendy",X655),"antologia",as.character(rodzaj_ksiazki))) %>%
-  select(1:30,rodzaj_ksiazki)
-```
-
-```{r przypisanie książce rodzaju (podmiotowa, przedmiotowa, antologie, współwydanie)}
-blabla <- bn_ok
-
-bn_ok <- bn_ok %>%
-  mutate(czy_ma_ukd = ifelse(X080=="","nie","tak"),
-         position_dash = ifelse(grepl("(\\\\\\\\\\$a|:)(821\\.)",X080),str_locate(X080,"\\-")[,1], NA),
-         position_dash = ifelse(is.na(position_dash),"",as.integer(position_dash)),
-         position_091 = str_locate(X080,"\\(091\\)")[,1],
-         position_091 = ifelse(is.na(position_091),"",as.integer(position_091)),
-         rodzaj_ksiazki = ifelse(grepl("Antologi",X655),"antologia",
-                                 ifelse(position_091!=""&position_dash!="",
-                          ifelse(as.integer(position_091)<as.integer(position_dash), "przedmiotowa", "podmiotowa"),
-                          ifelse(position_dash!="","podmiotowa","przedmiotowa"))),
-         rodzaj_ksiazki = ifelse(czy_ma_ukd=="nie","",as.character(rodzaj_ksiazki)))
-gatunki_podmiotowe <- bn_ok %>%
-  filter(rodzaj_ksiazki=="podmiotowa") %>%
-  select(X655) %>%
-  unique() %>%
-  cSplit(.,"X655",sep = "|",direction = "long") %>%
-  unique() %>%
-  filter(str_detect(X655,"\\$y[\\d-]+ w\\."))
-gatunki_podmiotowe <- str_replace_all(str_replace_all(paste(gatunki_podmiotowe$X655,collapse = "|"),"(.{2})(\\$a)","\\2"),"\\$","\\\\$")
-bn_ok$czy_podmiotowy <- grepl(gatunki_podmiotowe,bn_ok$X655)|grepl(gatunki_podmiotowe,bn_ok$X650)
-bn_ok <- bn_ok %>%
-  mutate(rodzaj_ksiazki = ifelse(str_count(X245, " / ")+1>2,"antologia",
-                                 ifelse(str_count(X245, " / ")+1==2,"współwydanie",
-                                        ifelse(rodzaj_ksiazki==""&czy_podmiotowy==TRUE&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                               ifelse(X100!=""&grepl("aPamiętnik|aLiteratura podróżnicza",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                                      ifelse(X100!=""&grepl("aReportaż",X655)&grepl("\\$y",X655)&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                                             ifelse(X100!=""&(X655=="\\7$aReportaż polski$2DBN"|X655=="\\7$aReportaż$2DBN")&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",
-                                                                    ifelse(rodzaj_ksiazki==""&czy_podmiotowy==FALSE,"przedmiotowa",as.character(rodzaj_ksiazki)))))))),
-         rodzaj_ksiazki = ifelse(rodzaj_ksiazki=="","przedmiotowa",as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X490)|grepl("Lektury Wszech Czasów : streszczenie, analiza, interpretacja|Lektury Wszech Czasów - Literat|Biblioteczka Opracowań",X830),"przedmiotowa",as.character(rodzaj_ksiazki)),
-         ilu_tworcow = str_count(X100,"\\$a"),
-         rodzaj_ksiazki = ifelse(ilu_tworcow>4&rodzaj_ksiazki=="podmiotowa","antologia",as.character(rodzaj_ksiazki)),
-         rodzaj_ksiazki = ifelse(grepl("Legendy",X655),"antologia",as.character(rodzaj_ksiazki))) %>%
-  select(1:30,rodzaj_ksiazki)
+bn_ok <- bn_ok %>% 
+  mutate(rodzaj_ksiazki = ifelse(id %in% marc_field_100$id, "podmiotowa", as.character(rodzaj_ksiazki)),
+         rodzaj_ksiazki = ifelse(id %in% stare_rodzajowanie$id, "przedmiotowa",as.character(rodzaj_ksiazki)),
+         rodzaj_ksiazki = ifelse(X080=="\\\\$a82-1/-9(0.054)"&rodzaj_ksiazki=="przedmiotowa"&!grepl("xhistoria|xtematyka|xbiografia",X650)&!grepl("xhistoria|xtematyka|xbiografia",X655),"podmiotowa",as.character(rodzaj_ksiazki)))
 ```
 
 ```{r wyznaczenie zbioru automatycznie IOK}
@@ -909,84 +865,13 @@ IOK_podm <- IOK_podm %>%
   select(id) %>%
   mutate(automatyczna_podmiotowa = "tak")
 ###tutaj kończą się automatyczne podmiotowe
-
-#automatyczny IOK dla przedmiotowych; osoba z PBL jako temat
-#600
-IOK_przedm <- bn_ok %>%
-  filter(str_count(X600,"\\$a")==1)
-marc_field_600 <- IOK_przedm %>%
-  select(id,X600)%>%
-  filter(X600!="") %>%
-  mutate(X600=str_replace_all(X600,"(^|\\|)","~\\1")) %>%
-  cSplit(.,"X600",sep = "~",direction = "long") %>%
-  filter(X600!="") %>%
-  mutate(X600=str_remove_all(X600,"^\\|")) %>%
-  mutate(indicator = str_replace_all(X600,"(^.*?)(\\$.*)","\\1"))
-subfield_list<- str_extract_all(IOK_przedm$X600,"\\$.")
-subfield_list<- unique(unlist(subfield_list))
-empty_table<- data.frame(matrix(ncol = length(subfield_list),nrow = lengths(marc_field_600)[1]))
-colnames(empty_table) <-subfield_list
-marc_field_600<-cbind(marc_field_600,empty_table)
-subfield_list_char <- paste("(",subfield_list,")",sep = "")
-subfield_list_char <- str_replace_all(subfield_list_char,"\\$","\\\\$")
-x <- 1:length(subfield_list)
-
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  marc_field_600$X600 <- str_replace(marc_field_600$X600,subfield_list_char[i],"|\\1")
-}
-for (i in x) {
-  progress(match(i,x), max.value = length(x)) 
-  subfield_list_char2 <- str_replace_all(subfield_list,"\\$","\\\\$")
-  string_a <- "(^)(.*?\\|"
-  string_b <- subfield_list_char2[i]
-  string_c <- ")(.*?)(\\,{0,1})((\\|\\$)(.*)|$)"
-  string <- paste(string_a,string_b,string_c,sep = "")
-  marc_field_600[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_600$X600),str_replace_all(gsub(string,"\\3",marc_field_600$X600),"\\${2}.", "~"),NA)
-}
-marc_field_600 <- marc_field_600 %>%
-  select(id,`$a`,`$d`,`$c`) %>%
-  mutate(name = ifelse(!is.na(`$c`)&substr(`$c`,nchar(`$c`),nchar(`$c`))==";",paste(`$a`,`$c`,`$d`,sep = " "),ifelse(!is.na(`$d`),paste(`$a`,`$d`,sep = " "),as.character(`$a`)))) %>%
-  select(id,name) %>%
-  mutate(name = str_replace(name,"(\\))(\\.$)","\\1"),
-         name = str_replace(name, "([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž])(\\.$)","\\1"))
-
-tworca_i_dzial <- dbGetQuery(PBL,
-                             "select tw.tw_tworca_id \"pbl_id\", tw.tw_nazwisko||', '||tw.tw_imie \"tworca_pbl\", dz.dz_dzial_id||'|'||dz.dz_nazwa \"osoba_pbl_dzial_id_name\"
-                              from pbl_tworcy tw
-                              full join pbl_dzialy dz on dz.dz_dzial_id=tw.tw_dz_dzial_id")
-
-bn_records_pbl_people <- marc_field_600 %>%
-  unique() %>%
-  inner_join(.,pbl_viaf,by = c("name" = "BN_name")) %>%
-  select(1:3) %>%
-  left_join(.,tworca_i_dzial,by = "pbl_id")
-bn_records_pbl_people_id <- bn_records_pbl_people %>%
-  select(id,tworca_pbl) %>%
-  group_by(id) %>%
-  mutate(tworca_pbl = paste(unique(tworca_pbl),collapse = "~")) %>%
-  ungroup() %>%
-  unique() %>%
-  filter(!grepl("~",tworca_pbl))
-
-IOK_przedm <- IOK_przedm %>%
-  full_join(.,bn_records_pbl_people_id,by = "id") %>%
-  filter(rodzaj_ksiazki=="przedmiotowa"&X600!=""&str_count(X600,"\\$a")==1&!is.na(tworca_pbl)) %>%
-  mutate(czy_o_czyms = str_detect(X655,"\\$x"))
-IOK_przedm$czy_gatunek <- grepl(gatunki_podmiotowe,IOK_przedm$X655)
-IOK_przedm <- IOK_przedm %>%
-  filter((grepl("tematyka|biografia|historia",X655,ignore.case = TRUE)|czy_o_czyms==TRUE)&!grepl("Księga pamiątkowa",X655)) %>%
-  filter(grepl("((a|:)(821))|(791)",X080)) %>%
-  select(id) %>%
-  mutate(automatyczna_przedmiotowa = "tak")
-
 bn_ok <- bn_ok %>%
   full_join(.,IOK_podm,by = "id") %>%
-  full_join(.,IOK_przedm,by = "id") %>%
-  mutate(czy_automatycznie = ifelse(!is.na(automatyczna_podmiotowa),"podmiotowa",
-                                    ifelse(!is.na(automatyczna_przedmiotowa),"przedmiotowa","nie"))) %>%
-  select(-automatyczna_podmiotowa,-automatyczna_przedmiotowa) %>%
+  mutate(czy_automatycznie = ifelse(!is.na(automatyczna_podmiotowa),"podmiotowa","nie")) %>%
+  select(-automatyczna_podmiotowa) %>%
   mutate(czy_automatycznie = ifelse(czy_automatycznie=="podmiotowa"&rodzaj_ksiazki!="podmiotowa","nie",as.character(czy_automatycznie)))
+
+###czy i jak automatyzować przedmiotową?
 
 #write.csv2(bn_ok, "C:/Users/Cezary/Desktop/bn_ok_2009.csv", row.names = F, na = '', fileEncoding = 'UTF-8')
 ```
@@ -2245,9 +2130,9 @@ bn_ok <- bn_ok %>%
                                   ifelse(DZ_NAZWA=="Hasła osobowe (literatura polska) - B","PAULINA",
                                          ifelse(DZ_NAZWA=="Hasła osobowe (literatura polska) - G","MARTAK",
                                                 ifelse(DZ_NAZWA=="Hasła osobowe (literatura polska) - L","BEATAK",
-                                                       ifelse(DZ_NAZWA=="Literatura współczesna (utwory anonimowe i ulotne)","GOSIA",
-                                                              ifelse(DZ_NAZWA=="Utwory anonimowe i ulotne","GOSIA",
-                                                                     ifelse(DZ_NAZWA=="Utwory anonimowe i ulotne (epoka nieznana)","GOSIA",
+                                                       ifelse(DZ_NAZWA=="Literatura współczesna (utwory anonimowe i ulotne)","ANIA",
+                                                              ifelse(DZ_NAZWA=="Utwory anonimowe i ulotne","ANIA",
+                                                                     ifelse(DZ_NAZWA=="Utwory anonimowe i ulotne (epoka nieznana)","ANIA",
                                                                             ifelse(DZ_NAZWA=="Hasła osobowe (literatura polska) - N","GOSIA",
                                                                                    ifelse(DZ_NAZWA=="Hasła osobowe (literatura polska) - O","GOSIA",
                                                                                           ifelse(DZ_NAZWA=="Hasła osobowe (literatura polska) - Q","GOSIA",
@@ -2302,6 +2187,9 @@ bn_ok <- bn_ok %>%
 
 #przygotować wszystko dookoła - listy pracowników; wysłać z R od razu na dysk?
 #zrobić współwydanie
+
+count <- as.data.frame(table(bn_ok$redaktor_dzialu,bn_ok$czy_automatycznie)) %>% 
+  filter(Var2=="nie")
 
 test <- out %>%
   filter(pracownik == "NA_podm")
@@ -2466,10 +2354,8 @@ marc_field_245 <- marc_field_245 %>%
          `$p` = paste(ifelse(is.na(`$p`),"",as.character(`$p`)),collapse = " ")) %>%
   ungroup() %>%
   unique() %>%
-  mutate(ZA_TYTUL = paste(`$a`,`$b`,`$n`,`$p`,sep = ""))
-
-marc_field_245 <- marc_field_245 %>%
-  mutate(ZA_TYTUL = paste(`$a`,`$b`,`$n`,`$p`,sep = " "),
+  unite("ZA_TYTUL",`$a`:`$p`,sep = " ",na.rm = TRUE) %>% 
+  mutate(ZA_TYTUL = str_replace_all(ZA_TYTUL," +"," "),
          ZA_TYTUL = str_remove(ZA_TYTUL, "\\s+\\/\\s{0,}$"),
          ZA_TYTUL = ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(\\(|\\[)(.)",ZA_TYTUL),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(\\(|\\[)(.)","\\1.\\2\\5\\U\\6",perl=TRUE,ZA_TYTUL),
                            ifelse(grepl("(\\W)( )(:|;)( )(\\(|\\[)(.)",ZA_TYTUL),gsub("(\\W)( )(:|;)( )(\\(|\\[)(.)","\\1\\2\\U\\5\\6",perl = TRUE,ZA_TYTUL),
@@ -2480,7 +2366,8 @@ marc_field_245 <- marc_field_245 %>%
                                   ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(.)",ZA_TYTUL),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(.)","\\1.\\2\\U\\5",perl = TRUE,ZA_TYTUL),
                                          ifelse(grepl("(\\W)( )(:|;)( )(.)",ZA_TYTUL),gsub("(\\W)( )(:|;)( )(.)","\\1\\2\\U\\5",perl = TRUE,ZA_TYTUL),as.character(ZA_TYTUL))))),
          ZA_TYTUL = str_replace_all(ZA_TYTUL,"\\.{3} \\.{3}","... "),
-         ZA_TYTUL = str_replace_all(ZA_TYTUL," ; ",". ")) %>%
+         ZA_TYTUL = str_replace_all(ZA_TYTUL," ; ",". "),
+         ZA_TYTUL = gsub("( : )(.)",". \\U\\2",perl=TRUE,ZA_TYTUL)) %>%
   select(ZA_UWAGI,ZA_TYTUL)
 #dopisanie gatunku do przedmiotowej na podstawie 655 i 650  
 gatunki_pbl <- data.frame(gatunek = c("aforyzm", "album", "antologia", "autobiografia", "dziennik", "esej", "felieton", "inne", "kazanie", "list", "miniatura prozą", "opowiadanie", "poemat", "powieść", "proza", "proza poetycka", "reportaż", "rozmyślanie religijne", "rysunek, obraz", "scenariusz", "szkic", "tekst biblijny", "tekst dramatyczny", "dramat", "wiersz", "wspomnienia", "wypowiedź", "pamiętniki", "poezja", "literatura podróżnicza", "satyra", "piosenka"))
@@ -2513,10 +2400,13 @@ gatunki_bn <- gatunki_bn %>%
   mutate(gatunek = gsub("(^.)","\\U\\1",perl = TRUE, gatunek))
 #połączenie tytułu z gatunkiem
 za_tytul <- marc_field_245 %>%
-  left_join(.,gatunki_bn,by="ZA_UWAGI") %>%
-  mutate(ZA_TYTUL = ifelse(!is.na(gatunek)&(substr(ZA_TYTUL,nchar(ZA_TYTUL),nchar(ZA_TYTUL))=="."|substr(ZA_TYTUL,nchar(ZA_TYTUL),nchar(ZA_TYTUL))=="!"|substr(ZA_TYTUL,nchar(ZA_TYTUL),nchar(ZA_TYTUL))=="?"),paste(ZA_TYTUL," [",gatunek,"]",sep = ""),
-                           ifelse(!is.na(gatunek)&(substr(ZA_TYTUL,nchar(ZA_TYTUL),nchar(ZA_TYTUL))!="."|substr(ZA_TYTUL,nchar(ZA_TYTUL),nchar(ZA_TYTUL))!="!"|substr(ZA_TYTUL,nchar(ZA_TYTUL),nchar(ZA_TYTUL))!="?"),paste(ZA_TYTUL,". [",gatunek,"]",sep = ""),as.character(ZA_TYTUL)))) %>%
-  select(ZA_UWAGI,ZA_TYTUL)
+  left_join(.,gatunki_bn,by="ZA_UWAGI") %>% 
+  mutate(gatunek = paste("[",gatunek,"]",sep = ""),
+         gatunek = ifelse(gatunek=="[NA]",NA,as.character(gatunek))) %>% 
+  unite("ZA_TYTUL", ZA_TYTUL:gatunek, sep = ". ",na.rm=TRUE) %>% 
+  mutate(ZA_TYTUL = str_replace_all(ZA_TYTUL,"\\. \\.",". "),
+         ZA_TYTUL = str_replace(ZA_TYTUL,"(\\!)(\\.)|(\\?)(\\.)","\\1"))
+
 #4: tytuł oryginału
 #pole 246
 marc_field_246 <- data %>%
@@ -2561,8 +2451,9 @@ marc_field_246 <- marc_field_246 %>%
          `$p` = paste(ifelse(is.na(`$p`),"",as.character(`$p`)),collapse = "")) %>%
   ungroup() %>%
   unique() %>%
-  mutate(X246 = paste(`$a`,`$b`,`$n`,`$p`,sep = "")) %>%
-  mutate(X246 = str_remove(X246, "\\s+\\/\\s{0,}$"),
+  unite("X246",`$a`:`$p`,sep = " ",na.rm = TRUE) %>% 
+  mutate(X246 = str_replace_all(X246," +"," "),
+         X246 = str_remove(X246, "\\s+\\/\\s{0,}$"),
          X246 = ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(\\(|\\[)(.)",X246),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(\\(|\\[)(.)","\\1.\\2\\5\\U\\6",perl=TRUE,X246),
                            ifelse(grepl("(\\W)( )(:|;)( )(\\(|\\[)(.)",X246),gsub("(\\W)( )(:|;)( )(\\(|\\[)(.)","\\1\\2\\U\\5\\6",perl = TRUE,X246),
                                   ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)",X246),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)","\\1.\\2\\U\\5",perl = TRUE,X246),
@@ -2571,7 +2462,8 @@ marc_field_246 <- marc_field_246 %>%
                            ifelse(grepl("(\\W)( )(:|;)( )(\\(|\\[)(.)",X246),gsub("(\\W)( )(:|;)( )(\\(|\\[)(.)","\\1\\2\\U\\5\\6",perl = TRUE,X246),
                                   ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)",X246),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)","\\1.\\2\\U\\5",perl = TRUE,X246),
                                          ifelse(grepl("(\\W)( )(:|;)( ){0,1}(.)",X246),gsub("(\\W)( )(:|;)( ){0,1}(.)","\\1\\2\\U\\5",perl = TRUE,X246),as.character(X246))))),
-         X246 = str_replace_all(X246,"\\.{3} \\.{3}","... ")) %>%
+         X246 = str_replace_all(X246,"\\.{3} \\.{3}","... "),
+         X246 = gsub("( : )(.)",". \\U\\2",perl=TRUE,X246)) %>%
   select(ZA_UWAGI, X246)
 
 #pole 500
@@ -3289,7 +3181,7 @@ polaczone <- data %>%
   select(noquote(kolejnosc))
 colnames(polaczone) <- c("rekord_BN","rz_nazwa","za_ro_rok","za_type","rz_rodzaj_id","DZ_NAZWA","DZ_DZIAL_ID","tw_tworca_id","am_autor_id","am_nazwisko","am_imie","za_tytul","za_tytul_oryginalu","za_jezyk_oryginalu","os_osoba_id","os_nazwisko","os_imie","fo_symbol","za_opis_wspoltworcow","za_wydanie","za_tomy","za_instytucja","wy_wydawnictwo_id","wy_miejsce","wy_nazwa","za_rok_wydania","za_opis_fizyczny_ksiazki","za_seria_wydawnicza","tw_nazwisko","tw_imie","pracownik","za_adnotacje","BN_URL")
 polaczone <- polaczone %>% 
-  mutate(rekord_BN = paste(za_ro_rok,sprintf("%05d", as.integer(rekord_BN)),sep = "_"))
+  mutate(rekord_BN = paste(za_ro_rok,sprintf("%05d", as.integer(rekord_BN)),sep = "~"))
 
 #zasygnalizowanie niepoprawnego kodowania
 x <- 1:(length(polaczone)-2)
@@ -3579,7 +3471,7 @@ for (i in x) {
   marc_field_245[,i+3] <- ifelse(grepl(subfield_list_char2[i],marc_field_245$X245),str_replace_all(gsub(string,"\\3",marc_field_245$X245),"\\${2}.", "~"),NA)
 }
 
-marc_field_245 <- marc_field_245 %>%
+za_tytul <- marc_field_245 %>%
   select(ZA_UWAGI,`$a`,`$b`,`$n`,`$p`) %>%
   group_by(ZA_UWAGI) %>%
   mutate(`$a` = paste(ifelse(is.na(`$a`),"",as.character(`$a`)),collapse = " "),
@@ -3588,10 +3480,8 @@ marc_field_245 <- marc_field_245 %>%
          `$p` = paste(ifelse(is.na(`$p`),"",as.character(`$p`)),collapse = " ")) %>%
   ungroup() %>%
   unique() %>%
-  mutate(ZA_TYTUL = paste(`$a`,`$b`,`$n`,`$p`,sep = ""))
-
-za_tytul <- marc_field_245 %>%
-  mutate(ZA_TYTUL = paste(`$a`,`$b`,`$n`,`$p`,sep = " "),
+  unite("ZA_TYTUL",`$a`:`$p`,sep = " ",na.rm = TRUE) %>%
+  mutate(ZA_TYTUL = str_replace_all(ZA_TYTUL," +"," "),
          ZA_TYTUL = str_remove(ZA_TYTUL, "\\s+\\/\\s{0,}$"),
          ZA_TYTUL = ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(\\(|\\[)(.)",ZA_TYTUL),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(\\(|\\[)(.)","\\1.\\2\\5\\U\\6",perl=TRUE,ZA_TYTUL),
                            ifelse(grepl("(\\W)( )(:|;)( )(\\(|\\[)(.)",ZA_TYTUL),gsub("(\\W)( )(:|;)( )(\\(|\\[)(.)","\\1\\2\\U\\5\\6",perl = TRUE,ZA_TYTUL),
@@ -3602,7 +3492,8 @@ za_tytul <- marc_field_245 %>%
                                   ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(.)",ZA_TYTUL),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(.)","\\1.\\2\\U\\5",perl = TRUE,ZA_TYTUL),
                                          ifelse(grepl("(\\W)( )(:|;)( )(.)",ZA_TYTUL),gsub("(\\W)( )(:|;)( )(.)","\\1\\2\\U\\5",perl = TRUE,ZA_TYTUL),as.character(ZA_TYTUL))))),
          ZA_TYTUL = str_replace_all(ZA_TYTUL,"\\.{3} \\.{3}","... "),
-         ZA_TYTUL = str_replace_all(ZA_TYTUL," ; ",". ")) %>%
+         ZA_TYTUL = str_replace_all(ZA_TYTUL," ; ",". "),
+         ZA_TYTUL = gsub("( : )(.)",". \\U\\2",perl=TRUE,ZA_TYTUL)) %>%
   select(ZA_UWAGI,ZA_TYTUL)
 
 #4: tytuł oryginału
@@ -3649,8 +3540,9 @@ marc_field_246 <- marc_field_246 %>%
          `$p` = paste(ifelse(is.na(`$p`),"",as.character(`$p`)),collapse = "")) %>%
   ungroup() %>%
   unique() %>%
-  mutate(X246 = paste(`$a`,`$b`,`$n`,`$p`,sep = "")) %>%
-  mutate(X246 = str_remove(X246, "\\s+\\/\\s{0,}$"),
+  unite("X246",`$a`:`$p`,sep = " ",na.rm = TRUE) %>% 
+  mutate(X246 = str_replace_all(X246," +"," "),
+         X246 = str_remove(X246, "\\s+\\/\\s{0,}$"),
          X246 = ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(\\(|\\[)(.)",X246),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(\\(|\\[)(.)","\\1.\\2\\5\\U\\6",perl=TRUE,X246),
                            ifelse(grepl("(\\W)( )(:|;)( )(\\(|\\[)(.)",X246),gsub("(\\W)( )(:|;)( )(\\(|\\[)(.)","\\1\\2\\U\\5\\6",perl = TRUE,X246),
                                   ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)",X246),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)","\\1.\\2\\U\\5",perl = TRUE,X246),
@@ -3659,7 +3551,8 @@ marc_field_246 <- marc_field_246 %>%
                            ifelse(grepl("(\\W)( )(:|;)( )(\\(|\\[)(.)",X246),gsub("(\\W)( )(:|;)( )(\\(|\\[)(.)","\\1\\2\\U\\5\\6",perl = TRUE,X246),
                                   ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)",X246),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)","\\1.\\2\\U\\5",perl = TRUE,X246),
                                          ifelse(grepl("(\\W)( )(:|;)( ){0,1}(.)",X246),gsub("(\\W)( )(:|;)( ){0,1}(.)","\\1\\2\\U\\5",perl = TRUE,X246),as.character(X246))))),
-         X246 = str_replace_all(X246,"\\.{3} \\.{3}","... ")) %>%
+         X246 = str_replace_all(X246,"\\.{3} \\.{3}","... "),
+         X246 = gsub("( : )(.)",". \\U\\2",perl=TRUE,X246)) %>%
   select(ZA_UWAGI, X246)
 
 #pole 500
@@ -4377,7 +4270,7 @@ polaczone <- data %>%
   select(noquote(kolejnosc))
 colnames(polaczone) <- c("rekord_BN","rz_nazwa","za_ro_rok","za_type","rz_rodzaj_id","DZ_NAZWA","DZ_DZIAL_ID","tw_tworca_id","am_autor_id","am_nazwisko","am_imie","za_tytul","za_tytul_oryginalu","za_jezyk_oryginalu","os_osoba_id","os_nazwisko","os_imie","fo_symbol","za_opis_wspoltworcow","za_wydanie","za_tomy","za_instytucja","wy_wydawnictwo_id","wy_miejsce","wy_nazwa","za_rok_wydania","za_opis_fizyczny_ksiazki","za_seria_wydawnicza","tw_nazwisko","tw_imie","pracownik","za_adnotacje","BN_URL")
 polaczone <- polaczone %>% 
-  mutate(rekord_BN = paste(za_ro_rok,sprintf("%05d", as.integer(rekord_BN)),sep = "_"))
+  mutate(rekord_BN = paste(za_ro_rok,sprintf("%05d", as.integer(rekord_BN)),sep = "~"))
 
 #zasygnalizowanie niepoprawnego kodowania
 x <- 1:(length(polaczone)-2)
@@ -4642,10 +4535,8 @@ marc_field_245 <- marc_field_245 %>%
          `$p` = paste(ifelse(is.na(`$p`),"",as.character(`$p`)),collapse = " ")) %>%
   ungroup() %>%
   unique() %>%
-  mutate(ZA_TYTUL = paste(`$a`,`$b`,`$n`,`$p`,sep = ""))
-
-marc_field_245 <- marc_field_245 %>%
-  mutate(ZA_TYTUL = paste(`$a`,`$b`,`$n`,`$p`,sep = " "),
+  unite("ZA_TYTUL",`$a`:`$p`,sep = " ",na.rm = TRUE) %>% 
+  mutate(ZA_TYTUL = str_replace_all(ZA_TYTUL," +"," "),
          ZA_TYTUL = str_remove(ZA_TYTUL, "\\s+\\/\\s{0,}$"),
          ZA_TYTUL = ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(\\(|\\[)(.)",ZA_TYTUL),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(\\(|\\[)(.)","\\1.\\2\\5\\U\\6",perl=TRUE,ZA_TYTUL),
                            ifelse(grepl("(\\W)( )(:|;)( )(\\(|\\[)(.)",ZA_TYTUL),gsub("(\\W)( )(:|;)( )(\\(|\\[)(.)","\\1\\2\\U\\5\\6",perl = TRUE,ZA_TYTUL),
@@ -4656,7 +4547,8 @@ marc_field_245 <- marc_field_245 %>%
                                   ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(.)",ZA_TYTUL),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( )(.)","\\1.\\2\\U\\5",perl = TRUE,ZA_TYTUL),
                                          ifelse(grepl("(\\W)( )(:|;)( )(.)",ZA_TYTUL),gsub("(\\W)( )(:|;)( )(.)","\\1\\2\\U\\5",perl = TRUE,ZA_TYTUL),as.character(ZA_TYTUL))))),
          ZA_TYTUL = str_replace_all(ZA_TYTUL,"\\.{3} \\.{3}","... "),
-         ZA_TYTUL = str_replace_all(ZA_TYTUL," ; ",". ")) %>%
+         ZA_TYTUL = str_replace_all(ZA_TYTUL," ; ",". "),
+         ZA_TYTUL = gsub("( : )(.)",". \\U\\2",perl=TRUE,ZA_TYTUL)) %>%
   select(ZA_UWAGI,ZA_TYTUL)
 #dopisanie gatunku do przedmiotowej na podstawie 655 i 650  
 gatunki_pbl <- data.frame(gatunek = c("aforyzm", "album", "antologia", "autobiografia", "dziennik", "esej", "felieton", "inne", "kazanie", "list", "miniatura prozą", "opowiadanie", "poemat", "powieść", "proza", "proza poetycka", "reportaż", "rozmyślanie religijne", "rysunek, obraz", "scenariusz", "szkic", "tekst biblijny", "tekst dramatyczny", "dramat", "wiersz", "wspomnienia", "wypowiedź", "pamiętniki", "poezja", "literatura podróżnicza", "satyra", "piosenka"))
@@ -4688,10 +4580,12 @@ gatunki_bn <- gatunki_bn %>%
   mutate(gatunek = gsub("(^.)","\\U\\1",perl = TRUE, gatunek))
 #połączenie tytułu z gatunkiem
 za_tytul <- marc_field_245 %>%
-  left_join(.,gatunki_bn,by="ZA_UWAGI") %>%
-  mutate(ZA_TYTUL = ifelse(!is.na(gatunek)&substr(ZA_TYTUL,nchar(ZA_TYTUL),nchar(ZA_TYTUL))==".",paste(ZA_TYTUL," [",gatunek,"]",sep = ""),
-                           ifelse(!is.na(gatunek)&substr(ZA_TYTUL,nchar(ZA_TYTUL),nchar(ZA_TYTUL))!=".",paste(ZA_TYTUL,". [",gatunek,"]",sep = ""),as.character(ZA_TYTUL)))) %>%
-  select(ZA_UWAGI,ZA_TYTUL)
+  left_join(.,gatunki_bn,by="ZA_UWAGI") %>% 
+  mutate(gatunek = paste("[",gatunek,"]",sep = ""),
+         gatunek = ifelse(gatunek=="[NA]",NA,as.character(gatunek))) %>% 
+  unite("ZA_TYTUL", ZA_TYTUL:gatunek, sep = ". ",na.rm=TRUE) %>% 
+  mutate(ZA_TYTUL = str_replace_all(ZA_TYTUL,"\\. \\.",". "),
+         ZA_TYTUL = str_replace(ZA_TYTUL,"(\\!)(\\.)|(\\?)(\\.)","\\1"))
 #4: tytuł oryginału
 #pole 246
 marc_field_246 <- data %>%
@@ -4736,8 +4630,9 @@ marc_field_246 <- marc_field_246 %>%
          `$p` = paste(ifelse(is.na(`$p`),"",as.character(`$p`)),collapse = "")) %>%
   ungroup() %>%
   unique() %>%
-  mutate(X246 = paste(`$a`,`$b`,`$n`,`$p`,sep = "")) %>%
-  mutate(X246 = str_remove(X246, "\\s+\\/\\s{0,}$"),
+  unite("X246",`$a`:`$p`,sep = " ",na.rm = TRUE) %>% 
+  mutate(X246 = str_replace_all(X246," +"," "),
+         X246 = str_remove(X246, "\\s+\\/\\s{0,}$"),
          X246 = ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(\\(|\\[)(.)",X246),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(\\(|\\[)(.)","\\1.\\2\\5\\U\\6",perl=TRUE,X246),
                            ifelse(grepl("(\\W)( )(:|;)( )(\\(|\\[)(.)",X246),gsub("(\\W)( )(:|;)( )(\\(|\\[)(.)","\\1\\2\\U\\5\\6",perl = TRUE,X246),
                                   ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)",X246),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)","\\1.\\2\\U\\5",perl = TRUE,X246),
@@ -4746,7 +4641,8 @@ marc_field_246 <- marc_field_246 %>%
                            ifelse(grepl("(\\W)( )(:|;)( )(\\(|\\[)(.)",X246),gsub("(\\W)( )(:|;)( )(\\(|\\[)(.)","\\1\\2\\U\\5\\6",perl = TRUE,X246),
                                   ifelse(grepl("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)",X246),gsub("([a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźžIVX])( )(:|;)( ){0,1}(.)","\\1.\\2\\U\\5",perl = TRUE,X246),
                                          ifelse(grepl("(\\W)( )(:|;)( ){0,1}(.)",X246),gsub("(\\W)( )(:|;)( ){0,1}(.)","\\1\\2\\U\\5",perl = TRUE,X246),as.character(X246))))),
-         X246 = str_replace_all(X246,"\\.{3} \\.{3}","... ")) %>%
+         X246 = str_replace_all(X246,"\\.{3} \\.{3}","... "),
+         X246 = gsub("( : )(.)",". \\U\\2",perl=TRUE,X246)) %>%
   select(ZA_UWAGI, X246)
 
 #pole 500
@@ -5461,7 +5357,7 @@ polaczone <- data %>%
   select(noquote(kolejnosc))
 colnames(polaczone) <- c("rekord_BN","rz_nazwa","za_ro_rok","za_type","rz_rodzaj_id","DZ_NAZWA","DZ_DZIAL_ID","tw_tworca_id","am_autor_id","am_nazwisko","am_imie","za_tytul","za_tytul_oryginalu","za_jezyk_oryginalu","os_osoba_id","os_nazwisko","os_imie","fo_symbol","za_opis_wspoltworcow","za_wydanie","za_tomy","za_instytucja","wy_wydawnictwo_id","wy_miejsce","wy_nazwa","za_rok_wydania","za_opis_fizyczny_ksiazki","za_seria_wydawnicza","tw_nazwisko","tw_imie","pracownik","za_adnotacje","BN_URL")
 polaczone <- polaczone %>% 
-  mutate(rekord_BN = paste(za_ro_rok,sprintf("%05d", as.integer(rekord_BN)),sep = "_"))
+  mutate(rekord_BN = paste(za_ro_rok,sprintf("%05d", as.integer(rekord_BN)),sep = "~"))
 
 #zasygnalizowanie niepoprawnego kodowania
 x <- 1:(length(polaczone)-2)
@@ -6573,6 +6469,10 @@ write.csv2(out, "C:/Users/Cezary/Desktop/2005-2008_harlequiny_do_importu.csv", r
 #może nie ma sensu zapisywać tych plików wcześniej, tylko teraz je połaczyć?
 #to muszą mieć inną nazwę
 #a może zrobić pętlę z wczytaniem, że się pliki dodają? - fajne, ale to pierwsze bardziej praktyczne
+
+#masowy IOK dla nowych twórców w bazie
+
+#po każdym imporcie uzupełnić relację osobowa pbl-bn o nowych twórców
 
 ```
 
