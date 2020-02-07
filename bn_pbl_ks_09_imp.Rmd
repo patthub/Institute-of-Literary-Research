@@ -22,7 +22,7 @@ bn_ks <- read.csv2("C:/Users/Cezary/Downloads/bn_ks_2009.csv", encoding = "UTF-8
   filter(grepl("\\$aWA|\\$aW ",X040)) %>%
   filter(X655!="\\7$aKomiks$2DBN") %>%
   mutate(BN_URL = paste("https://katalogi.bn.org.pl/discovery/fulldisplay?docid=alma",as.character(X009),"&context=L&vid=48OMNIS_NLOP:48OMNIS_NLOP&lang=pl",sep = ""),
-         BN_URL = str_replace(ZA_URL_BN,"88&","66&"))
+         BN_URL = str_replace(BN_URL,"88&","66&"))
 
 ### przenieść kolejnych autorów z 700 do pola 100
 marc_field_700 <- bn_ks %>%
@@ -1703,6 +1703,19 @@ do_podmiotowej2 <- marc_field_100 %>%
   mutate(RZ_RODZAJ_ID = 1,
          RZ_NAZWA = "książka twórcy (podmiotowa)") %>%
   unique()
+
+
+#TUTAJ
+###przypisanie redaktora na podstawie zbieżności fraz nazewnictwa osoby z 100 z twórcą pbl (dla tych, które nie zostały zmapowane na linii pbl-bn) - książki twórcy
+
+
+
+
+
+
+
+
+
 
 ###przypisanie autorów podmiotowej do literatur i przypisanie do redaktorów na podstawie kodu literatury z pola X080 i tworzenie nowych twórców na podstawie pola 100
 podmiotowa_redaktorzy <- bn_ok %>%
