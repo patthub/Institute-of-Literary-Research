@@ -1103,6 +1103,7 @@ PBL_hasla_osobowe <- sheets_read(ss = "1zbwjnrtWGvbjrQTLMavJcWSu7HfP0I-USNgZ_KWi
   select(2:5)
 colnames(PBL_hasla_osobowe) <- c("DZ_DZIAL_ID","DZ_NAZWA","redaktor_dzialu","nazwa")
 ```
+
 ```{r gotowy plik}
 blabla <- bn_ok
 bn_ok <- blabla
@@ -1656,7 +1657,7 @@ lista_do_przepisania <- do_podmiotowej1$id
 bn_ok$rodzaj_ksiazki[bn_ok$id %in% lista_do_przepisania] <- "przedmiotowa"
 
 #przetworzenie całej podmiotowej (bo plik do_podmiotowej1 już jest w środku)
-###przypisanie redaktora na podstawie osoby z 100 jako twórcy (autora) - książki twórcy
+###przypisanie redaktora na podstawie osoby z 100 jako twórcy (autora) (tabela pbl-bn-viaf)- książki twórcy
 #100
 podmiotowa_redaktorzy <- bn_ok %>%
   filter(rodzaj_ksiazki=="podmiotowa") %>%
@@ -1765,18 +1766,16 @@ do_podmiotowej3 <- marc_field_100 %>%
                           ifelse(grepl(",",`$a`),str_replace_all(`$a`,"(.*?)(, )(.*)","\\3"),"*")),
          nazwa = str_replace_all(str_to_lower(paste(TW_NAZWISKO,TW_IMIE,sep = "")), "\\W", "")) %>%
   select(id,TW_NAZWISKO,TW_IMIE,nazwa) %>% 
-  inner_join(.,PBL_tworcy_podm %>% select(TW_TWORCA_ID,DZ_DZIAL_ID=TW_DZ_DZIAL_ID,DZ_NAZWA,nazwa),by="nazwa") %>% 
+  inner_join(.,PBL_tworcy_podm %>% select(TW_TWORCA_ID,DZ_DZIAL_ID=TW_DZ_DZIAL_ID,DZ_NAZWA,nazwa),by="nazwa")
+do_podmiotowej3$same <- cumsum(!duplicated(do_podmiotowej3[1:4]))
+do_podmiotowej3 <- do_podmiotowej3 %>% 
+  arrange(id,TW_NAZWISKO,TW_IMIE,nazwa,TW_TWORCA_ID)
+do_podmiotowej3 <- do_podmiotowej3[!duplicated(do_podmiotowej3$same),] %>% 
   mutate(DZ_DZIAL_ID = as.integer(DZ_DZIAL_ID),
          RZ_RODZAJ_ID = 1,
          RZ_NAZWA = "książka twórcy (podmiotowa)") %>% 
   inner_join(.,redaktorzy_dzialow %>% select(DZ_DZIAL_ID,redaktor_dzialu),by="DZ_DZIAL_ID") %>% 
   select(names(do_podmiotowej1))
-
-###TUTAJ - sprawdzić na 2010 czy to wszystko działa
-
-
-
-
 
 ###przypisanie autorów podmiotowej do literatur i przypisanie do redaktorów na podstawie kodu literatury z pola X080 i tworzenie nowych twórców na podstawie pola 100
 podmiotowa_redaktorzy <- bn_ok %>%
@@ -2258,7 +2257,7 @@ kilka_literatur_nowego_tworcy <- bn_ok %>%
   unique() %>%
   filter(grepl("\\|",unikatowy_dzial)) %>%
   select(-unikatowy_dzial) %>%
-  mutate(id_grupy = 1:lengths(.)) %>%
+  mutate(id_grupy = 1:nrow(.)) %>%
   cSplit(.,c("id","DZ_DZIAL_ID","DZ_NAZWA","redaktor_dzialu"),sep = "|",direction = "long")
 
 kilka_literatur_nowego_tworcy[,2:7][duplicated(kilka_literatur_nowego_tworcy$id_grupy),] <- NA
@@ -2302,7 +2301,7 @@ test <- out %>%
   filter(pracownik == "NA_podm")
 
 
-write.csv2(bn_ok, "C:/Users/Cezary/Desktop/2009_listy_pracowników.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
+write.csv2(bn_ok, "C:/Users/Cezary/Desktop/test.csv", row.names = F, na = '', fileEncoding = 'Windows-1250')
 
 write.xlsx(bn_ok, "C:/Users/Cezary/Desktop/2009_listy_pracowników.xlsx",sheetName = "listy_pracownikow")
 
@@ -6689,7 +6688,8 @@ nowe_relacje <- nowe_relacje %>%
 test <- read.csv2("C:/Users/Cezary/Desktop/osoby.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
 
 marc_field_100 <- test %>%
-  select(tw_tworca_id,X100)%>%
+  select(TW_TWORCA_ID,X100) %>%
+  filter(!grepl("\\|",X100)) %>% 
   filter(X100!="") %>%
   mutate(X100=str_remove_all(X100,"^\\|")) %>%
   mutate(indicator = str_replace_all(X100,"(^.*?)(\\$.*)","\\1"))
@@ -6717,9 +6717,56 @@ for (i in x) {
 }
 
 test <- test %>% 
-   left_join(.,marc_field_100 %>% unite("BN_osoba",`$a`:`$c`,sep = " ",na.rm = TRUE) %>% select(tw_tworca_id,BN_osoba),by="tw_tworca_id") %>% 
+   inner_join(.,marc_field_100 %>% unite("BN_osoba",c(`$a`,`$c`,`$d`),sep = " ",na.rm = TRUE) %>% select(TW_TWORCA_ID,BN_osoba),by="TW_TWORCA_ID") %>% 
   unique() %>% 
-  select(TW_TWORCA_ID = tw_tworca_id,TW_NAZWISKO,TW_IMIE,BN_osoba)
+  select(TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE,BN_osoba) %>% 
+  mutate(BN_osoba = str_remove(BN_osoba,"\\.\\s{0,}$"))
+
+
+pbl_viaf_import <- data.frame(stringsAsFactors=FALSE)
+x <- 1:length(test$TW_TWORCA_ID)
+i <- 138
+
+for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  tryCatch({
+    id <- jsonlite::fromJSON(str_replace_all(paste("https://data.bn.org.pl/api/authorities.json?limit=100&name=",test$BN_osoba[i],sep = "")," ","%20")) %>% .$authorities %>% 
+      mutate(name = str_replace_all(name,""))
+    
+    a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž
+    "á|à|â|ã|ä|ă|ā|å|ą|æ|e|é|è|ê|ë|ě|ē|ė|ę|i|í|ì|î|ï|ī|į|i|o|ó|ò|ô|õ|ö|ő|ø|œ|u|ú|ù|û|ü|ű|ū|ů|y|ý|c|ć|č|ç|d|ď|đ|đ|g|ģ|ğ|k|ķ|l|ł|ļ|n|ń|ñ|ň|ņ|ŋ|r|ř|s|ś|š|ş|s|ß|t|ť|ŧ|þ|ţ|z|ż|ź|ž"
+    
+    
+    z <- as.character(id$name)
+    id <- jsonlite::fromJSON(str_replace_all(paste("https://data.bn.org.pl/api/authorities.json?limit=100&name=",test$BN_osoba[i],sep = "")," ","%20")) %>% .$authorities %>% 
+      select(id,name,title) %>% 
+      mutate(czy = grepl(str_replace(y,"(^.*?)( \\(.*$)","\\1"),z))
+    
+    id <- jsonlite::fromJSON(str_replace_all(paste("https://data.bn.org.pl/api/authorities.json?limit=100&name=",test$BN_osoba[i],sep = "")," ","%20")) %>% .$authorities %>% 
+      filter(grepl(str_replace(test$BN_osoba[i],"(^.*?)( \\(.*$)","\\1"),id$name)) %>% 
+      filter(if (str_extract(test$BN_osoba[i],"\\d+(?!.*\\d+)")>0) grepl(str_extract(test$BN_osoba[i],"\\d+(?!.*\\d+)"),name)) %>% 
+      #filter(grepl(str_replace_all(str_replace_all(test$BN_osoba[i],"\\(","\\\\("),"\\)","\\\\)"),name)) %>% 
+      filter(title=="") %>% .$id #%>% `[[`(1)
+    name <- paste(str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",id,sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`100` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\d+)"," \\2"),str_replace_all(str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",id,sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`400` %>% `[[`(3)),collapse = "|"),"\\|NA"),"(\\|)(\\(\\.+)"," \\2"),sep = "|")
+    viaf <- str_remove_all(paste(unlist(jsonlite::fromJSON(paste("https://data.bn.org.pl/api/authorities.json?id=",id,sep = "")) %>% .$authorities %>% .$marc %>% .$fields %>% `[[`(1) %>% .$`024` %>% .$subfields),collapse = "|"),"(\\|NA)|(\\|viaf)")
+  }, error=function(e){
+                     name <<- "brak danych (CR)"
+                     viaf <<- "brak danych (CR)"
+  })
+  iteration <- data.frame(test %>% select(1:4) %>% slice(i), id = id, name = name, viaf = viaf)
+  pbl_viaf_import <- rbind(pbl_viaf_import,iteration)
+}
+
+pbl_viaf_import <- pbl_viaf_import %>% 
+  rename(pbl_id = TW_TWORCA_ID,
+         pbl_nazwisko = TW_NAZWISKO,
+         pbl_imie = TW_IMIE,
+         BN_id = id,
+         BN_name = name) %>% 
+  mutate(czy_ten_sam = "tak") %>% 
+  select(pbl_id,pbl_nazwisko,pbl_imie,BN_id,BN_name,czy_ten_sam,viaf)
+
+write.xlsx(pbl_viaf_import, "C:/Users/Cezary/Desktop/relacje_osobowe_pbl_bn.xlsx",sheetName = "pbl-bn")
 
 #tutaj dokończyć!!!
 #skrobanie z jsonów bnu
