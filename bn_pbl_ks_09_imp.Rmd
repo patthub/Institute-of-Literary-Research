@@ -6685,7 +6685,8 @@ nowe_relacje <- nowe_relacje %>%
 
 ###tylko dla 2009
 
-test <- read.csv2("C:/Users/Cezary/Desktop/osoby.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE)
+test <- read.csv2("C:/Users/Cezary/Desktop/osoby.csv", encoding = "Windows-1250", header = TRUE, stringsAsFactors = FALSE) %>% 
+  rename(TW_TWORCA_ID = tw_tworca_id)
 
 marc_field_100 <- test %>%
   select(TW_TWORCA_ID,X100) %>%
@@ -6720,23 +6721,31 @@ test <- test %>%
    inner_join(.,marc_field_100 %>% unite("BN_osoba",c(`$a`,`$c`,`$d`),sep = " ",na.rm = TRUE) %>% select(TW_TWORCA_ID,BN_osoba),by="TW_TWORCA_ID") %>% 
   unique() %>% 
   select(TW_TWORCA_ID,TW_NAZWISKO,TW_IMIE,BN_osoba) %>% 
-  mutate(BN_osoba = str_remove(BN_osoba,"\\.\\s{0,}$"))
+  mutate(BN_osoba = str_remove(BN_osoba,"\\.\\s{0,}$"),
+         BN_osoba = str_remove(BN_osoba,"\\?"))
 
 
 pbl_viaf_import <- data.frame(stringsAsFactors=FALSE)
 x <- 1:length(test$TW_TWORCA_ID)
 i <- 138
+i <- 7
+i <- 258
 
 for (i in x) {
   progress(match(i,x), max.value = length(x)) 
-  tryCatch({
-    id <- jsonlite::fromJSON(str_replace_all(paste("https://data.bn.org.pl/api/authorities.json?limit=100&name=",test$BN_osoba[i],sep = "")," ","%20")) %>% .$authorities %>% 
-      mutate(name = str_replace_all(name,""))
+  tryCatch({  
+  id <- jsonlite::fromJSON(str_replace_all(paste("https://data.bn.org.pl/api/authorities.json?limit=100&name=",test$BN_osoba[i],sep = "")," ","%20")) %>% .$authorities %>% .$id
+  }, error=function(e){
+                     id <<- "brak danych (CR)"
+  })
+  iteration <- data.frame(test %>% select(1:4) %>% slice(i), id = id)
+  pbl_viaf_import <- rbind(pbl_viaf_import,iteration)
+}
     
-    a-zaáàâãäăāåąæeéèêëěēėęiíìîïīįioóòôõöőøœuúùûüűūůyýcćčçdďđđgģğkķlłļnńñňņŋrřsśšşsßtťŧþţzżźž
-    "á|à|â|ã|ä|ă|ā|å|ą|æ|e|é|è|ê|ë|ě|ē|ė|ę|i|í|ì|î|ï|ī|į|i|o|ó|ò|ô|õ|ö|ő|ø|œ|u|ú|ù|û|ü|ű|ū|ů|y|ý|c|ć|č|ç|d|ď|đ|đ|g|ģ|ğ|k|ķ|l|ł|ļ|n|ń|ñ|ň|ņ|ŋ|r|ř|s|ś|š|ş|s|ß|t|ť|ŧ|þ|ţ|z|ż|ź|ž"
     
-    
+ for (i in x) {
+  progress(match(i,x), max.value = length(x)) 
+  tryCatch({   
     z <- as.character(id$name)
     id <- jsonlite::fromJSON(str_replace_all(paste("https://data.bn.org.pl/api/authorities.json?limit=100&name=",test$BN_osoba[i],sep = "")," ","%20")) %>% .$authorities %>% 
       select(id,name,title) %>% 
